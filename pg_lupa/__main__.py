@@ -4,6 +4,7 @@ import click
 
 from . import lupa
 
+
 @click.command()
 @click.option("--input-logs", type=click.File("r"))
 @click.option("--output-html", type=click.File("w"))

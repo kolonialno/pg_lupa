@@ -19,6 +19,21 @@ TZMAPPING = {
 }
 
 
+def contrast_ratio_with_white(rgb) -> float:
+    def f(x):
+        return x / 3294 if x <= 10 else (x / 269 + 0.0513) ** 2.4
+
+    def l(r, g, b):
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+
+    r, g, b = rgb
+    return 1 / (l(r, g, b) + 0.05)
+
+
+def sufficient_contrast_with_white(rgb) -> bool:
+    return contrast_ratio_with_white(rgb) > 1.5
+
+
 def parse_date(s: str) -> datetime.datetime:
     return dateutil.parser.parse(s, tzinfos=TZMAPPING)
 
@@ -175,15 +190,14 @@ def classify_sql(sql: str) -> str:
 def hash_as_colour(s: str) -> str:
     rng = random.Random()
     rng.seed(s)
-    hue = rng.random()
-    saturation = 1.0
-    value = 1.0
-    return "#" + "".join(
-        [
-            "{:02X}".format(int(x * 255))
-            for x in colorsys.hsv_to_rgb(hue, saturation, value)
-        ]
-    )
+    for _ in range(100):
+        hue = rng.random()
+        saturation = 1.0
+        value = 1.0
+        rgb = [int(x * 255) for x in colorsys.hsv_to_rgb(hue, saturation, value)]
+        if sufficient_contrast_with_white(rgb):
+            break
+    return "#" + "".join(["{:02X}".format(x) for x in rgb])
 
 
 def parse_log_prefix(prefix: str) -> LogPrefixInfo:
