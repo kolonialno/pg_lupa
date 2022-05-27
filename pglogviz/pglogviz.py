@@ -25,9 +25,8 @@ LOG_PREFIX_RE = re.compile(
 )
 DURATION_LINE_RE = re.compile(r"^([0-9]+[.][0-9]{3}) ms +statement: (.*)$")
 
-
 class LogLine(pydantic.BaseModel):
-    timestamp: Optional[datetime.datetime]
+    timestamp: Optional[datetime.datetime] = None
     line: str
 
 
@@ -44,6 +43,20 @@ class DurationLogEntry(pydantic.BaseModel):
     statement: str
 
 
+class HoldingLockLogEntry(pydantic.BaseModel):
+    holding_lock_pid: int
+    wait_queue_pid: tuple[int, ...]
+
+
+def parse_holding_lock_log_line(s: str) -> HoldingLockLogEntry:
+    first_pid, _, remaining_pids = s.strip().strip(".").partition(". Wait queue: ")
+
+    return HoldingLockLogEntry(
+        holding_lock_pid=int(first_pid),
+        wait_queue_pid=tuple(int(x) for x in remaining_pids.split(",") if x),
+    )
+
+
 class Statement(pydantic.BaseModel):
     start_time: datetime.datetime
     end_time: datetime.datetime
@@ -57,6 +70,7 @@ class EventType(str, enum.Enum):
     DISCONNECT = "disconnect"
     AUTHORIZED = "connection authorized"
     DEADLOCK = "deadlock"
+    WAITING_FOR_LOCK = "waiting for lock"
 
 
 class Event(pydantic.BaseModel):
@@ -64,6 +78,8 @@ class Event(pydantic.BaseModel):
     pid: int
     context: LogPrefixInfo
     event_type: EventType
+    primary_related_pids: tuple[int, ...] = ()
+    secondary_related_pids: tuple[int, ...] = ()
 
 
 class Process(pydantic.BaseModel):
@@ -74,6 +90,7 @@ EVENT_COLOURS = {
     EventType.DISCONNECT: "magenta",
     EventType.AUTHORIZED: "green",
     EventType.DEADLOCK: "red",
+    EventType.WAITING_FOR_LOCK: "black",
 }
 
 
@@ -106,6 +123,8 @@ class EventVizData(pydantic.BaseModel):
     cy: float
     size: float
     colour: str
+    primary_related_process_ids: list[str]
+    secondary_related_process_ids: list[str]
     mouseover_content: str
 
 
@@ -237,9 +256,14 @@ div.tooltip {
     display: none;
 }
 
-.process-highlight {
+.process-primary-highlight {
     display: inline-block;
-    fill: rgb(0,0,20);
+    fill: rgb(240,180,180);
+}
+
+.process-secondary-highlight {
+    display: inline-block;
+    fill: rgb(200,200,200);
 }
 
 .context-highlight {
@@ -264,13 +288,14 @@ div.tooltip {
 
 let contentLockedToID = null;
 
-function setContent(id, content, lock) {
+function setContent(id, content, lock, processes1, processes2) {
   if (contentLockedToID && !lock) return;
 
   const alreadyLockedToThis = contentLockedToID && contentLockedToID === id;
   if (alreadyLockedToThis) {
     $("#context-info").html("");
     $(".context-highlight").removeClass("context-highlight");
+    $(".process-highlight").removeClass("process-primary-highlight process-secondary-highlight");
     contentLockedToID = null;
     return;
   }
@@ -280,6 +305,18 @@ function setContent(id, content, lock) {
 
   $(".context-highlight").removeClass("context-highlight");
   $("#" + id).addClass("context-highlight");
+
+  $(".process-highlight").removeClass("process-primary-highlight process-secondary-highlight");
+  if (processes1) {
+      processes1.forEach(procid => {
+        $(document.getElementById(procid)).addClass("process-highlight process-primary-highlight");
+      });
+  }
+  if (processes2) {
+    processes2.forEach(procid => {
+      $(document.getElementById(procid)).addClass("process-highlight process-secondary-highlight");
+    });
+  }
 }
 
 function draw() {
@@ -304,7 +341,6 @@ function draw() {
       .attr("height", function(d) { return d.height; })
       .attr("class", "pg_process")
       ;
-
 
   svg.selectAll().data(data.statements)
     .enter().append("rect")
@@ -337,10 +373,10 @@ function draw() {
       .attr("r", function(d) { return d.size; })
       .attr("class", "pg_event")
       .on("click", function(evt, d) {
-        setContent(d.id, d.mouseover_content, true);
+        setContent(d.id, d.mouseover_content, true, d.primary_related_process_ids, d.secondary_related_process_ids);
       })
       .on("mouseover", function(evt, d) {
-        setContent(d.id, d.mouseover_content, false);
+        setContent(d.id, d.mouseover_content, false, d.primary_related_process_ids, d.secondary_related_process_ids);
       })
       .on("mouseout", function(d) {
         setContent(null, "", false);
@@ -435,6 +471,12 @@ def visualize(model: Model):
                 size=0.5 * 0.5 * bar_height,
                 mouseover_content=render_event_mouseover_content(evt),
                 colour=EVENT_COLOURS[evt.event_type],
+                primary_related_process_ids=[
+                    f"process_{pid}" for pid in evt.primary_related_pids
+                ],
+                secondary_related_process_ids=[
+                    f"process_{pid}" for pid in evt.secondary_related_pids
+                ],
             )
         )
 
@@ -481,6 +523,19 @@ def ingest_logs_google_json(data):
         )
 
 
+def split_simple_lines(data: str) -> list[LogLine]:
+    rv = []
+
+    for line in data.strip().splitlines():
+        line = line.strip()
+
+        if not line:
+            continue
+
+        rv.append(LogLine(line=line))
+
+    return rv
+
 def parse_postgres_lines(lines: list[LogLine]) -> Model:
     stmts_by_process = collections.defaultdict(list)
     events = []
@@ -517,7 +572,26 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
         )
 
     def handle_process_holding_lock(context, core):
-        pass
+        entry = parse_holding_lock_log_line(core)
+
+        pids.add(entry.holding_lock_pid)
+        for pid in entry.wait_queue_pid:
+            pids.add(pid)
+
+        wait_queue_except_self = tuple(
+            x for x in entry.wait_queue_pid if x != context.pid
+        )
+
+        events.append(
+            Event(
+                time=context.timestamp,
+                pid=context.pid,
+                context=context,
+                event_type=EventType.WAITING_FOR_LOCK,
+                primary_related_pids=(entry.holding_lock_pid,),
+                secondary_related_pids=wait_queue_except_self,
+            )
+        )
 
     def handle_deadlock_detected(context, core):
         events.append(
@@ -554,9 +628,6 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
                 func(context, core)
                 handled = True
                 break
-
-        if not handled:
-            print("IGNORING", line.line, file=sys.stderr)
 
     processes = []
     for pid in sorted(pids):
