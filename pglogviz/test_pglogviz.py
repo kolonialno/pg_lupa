@@ -22,6 +22,16 @@ def test_parse_holding_lock_log_line():
         ),
     )
 
+def test_parse_log_prefix():
+    prefix = """2022-05-22 11:09:34 CEST [2949465-9] username@database """
+    entry = parse_log_prefix(prefix)
+    assert entry.pid == 2949465
+    assert entry.log_line_no == 9
+    assert entry.username == "username"
+    assert entry.database == "database"
+    oslo = pytz.timezone("Europe/Oslo")
+    assert entry.timestamp == datetime.datetime(2022, 5, 22, 11, 9, 34, tzinfo=oslo)
+
 def test_parse_tiny_log():
     model = parse_postgres_lines(split_simple_lines(TINY_LOG_DATA))
     assert len(model.events) == 6

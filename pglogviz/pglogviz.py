@@ -8,8 +8,17 @@ import json
 import datetime
 import sys
 import dateutil.parser
+import pytz
 
 from typing import Optional
+
+TZMAPPING = {
+    "CET": pytz.timezone("Europe/Oslo"),
+    "CEST": pytz.timezone("Europe/Oslo"),
+}
+
+def parse_date(s: str) -> datetime.datetime:
+    return dateutil.parser.parse(s, tzinfos=TZMAPPING)
 
 # log_line_prefix from postgresql.conf
 # Keys refer to src/backend/utils/error/elog.c
@@ -178,7 +187,7 @@ def parse_log_prefix(prefix: str) -> LogPrefixInfo:
     database = m.group(5)
 
     return LogPrefixInfo(
-        timestamp=dateutil.parser.parse(timestamp),
+        timestamp=parse_date(timestamp),
         pid=int(process_id),
         log_line_no=int(log_line_no),
         username=username,
@@ -512,7 +521,7 @@ def ingest_logs_google_json(data):
     for record in records:
         line = record["textPayload"]
 
-        timestamp = dateutil.parser.parse(record["timestamp"])
+        timestamp = parse_date(record["timestamp"])
 
         if carriage_return in line:
             line = line[line.index(carriage_return) + 1 :]
