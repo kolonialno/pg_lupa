@@ -60,6 +60,16 @@ def test_visualize_tiny_log():
     visualize(model)
 
 
+def test_classify_sql():
+    one = "SELECT foo FROM bar WHERE quux = 99"
+    two = "SELECT foo FROM bar WHERE quux = 123"
+    three = "SELECT foo, quux FROM bar WHERE quux = 123"
+    four = "SELECT foo   FROM   bar   WHERE  quux = 99  "
+    assert classify_sql(one) == classify_sql(four)
+    assert classify_sql(one) == classify_sql(two)
+    assert classify_sql(one) != classify_sql(three)
+
+
 def test_parse_holding_lock_log_line():
     entry = parse_holding_lock_log_line("2845932. Wait queue: 2864876, 2857466.")
     assert entry == HoldingLockLogEntry(

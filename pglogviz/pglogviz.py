@@ -158,6 +158,8 @@ class VizData(pydantic.BaseModel):
 def classify_sql(sql: str) -> str:
     sql = sql.strip().lower()
 
+    sql = " ".join(sql.split())  # _Usually_ correct
+
     if sql.startswith("select "):
         try:
             index = sql.index(" where ")
