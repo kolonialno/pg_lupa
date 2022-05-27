@@ -29,9 +29,14 @@ def parse_date(s: str) -> datetime.datetime:
 # %d -- database name
 LOG_LINE_PREFIX = "%t [%p-%l] %q%u@%d"
 
-LOG_PREFIX_RE = re.compile(
+OLD_STYLE_LOG_PREFIX_RE = re.compile(
     r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] ([A-Za-z0-9]+)@([A-Za-z0-9]+)$"
 )
+
+NEW_STYLE_LOG_PREFIX_RE = re.compile(
+    r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] ([A-Za-z0-9]+)@([A-Za-z0-9]+) [(]([^)]+)[)]$"
+)
+
 DURATION_LINE_RE = re.compile(r"^([0-9]+[.][0-9]{3}) ms +statement: (.*)$")
 
 class LogLine(pydantic.BaseModel):
@@ -42,9 +47,10 @@ class LogLine(pydantic.BaseModel):
 class LogPrefixInfo(pydantic.BaseModel):
     timestamp: datetime.datetime
     pid: int
-    log_line_no: int
-    username: str
-    database: str
+    log_line_no: Optional[int] = None
+    username: Optional[str] = None
+    database: Optional[str] = None
+    application_name: Optional[str] = None
 
 
 class DurationLogEntry(pydantic.BaseModel):
@@ -176,23 +182,42 @@ def hash_as_colour(s: str) -> str:
 def parse_log_prefix(prefix: str) -> LogPrefixInfo:
     prefix = prefix.strip()
 
-    m = LOG_PREFIX_RE.match(prefix)
-    if not m:
-        raise RuntimeError(f"Malformed log prefix: {prefix}")
+    m = OLD_STYLE_LOG_PREFIX_RE.match(prefix)
+    if m:
+        timestamp = m.group(1)
+        process_id = m.group(2)
+        log_line_no = m.group(3)
+        username = m.group(4)
+        database = m.group(5)
 
-    timestamp = m.group(1)
-    process_id = m.group(2)
-    log_line_no = m.group(3)
-    username = m.group(4)
-    database = m.group(5)
+        return LogPrefixInfo(
+            timestamp=parse_date(timestamp),
+            pid=int(process_id),
+            log_line_no=int(log_line_no),
+            username=username,
+            database=database,
+        )
 
-    return LogPrefixInfo(
-        timestamp=parse_date(timestamp),
-        pid=int(process_id),
-        log_line_no=int(log_line_no),
-        username=username,
-        database=database,
-    )
+    m = NEW_STYLE_LOG_PREFIX_RE.match(prefix)
+    if m:
+        timestamp = m.group(1)
+        process_id = m.group(2)
+        log_line_no = m.group(3)
+        username = m.group(4)
+        database = m.group(5)
+        app = m.group(6)
+
+        return LogPrefixInfo(
+            timestamp=parse_date(timestamp),
+            pid=int(process_id),
+            log_line_no=int(log_line_no),
+            username=username,
+            database=database,
+            application_name=app,
+        )
+
+
+    raise RuntimeError(f"Malformed log prefix: {prefix}")
 
 
 def parse_duration_log_line(line: str) -> Optional[DurationLogEntry]:
