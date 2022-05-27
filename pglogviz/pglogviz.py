@@ -7,7 +7,7 @@ import random
 import re
 import sys
 import typing
-from typing import Optional, Iterator
+from typing import Iterator, Optional
 
 import dateutil.parser
 import pydantic
@@ -706,6 +706,7 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
         processes=processes,
     )
 
+
 def parse_log_lines_automagically(f: typing.TextIO) -> Iterator[LogLine]:
     data = f.read()
 
@@ -715,9 +716,11 @@ def parse_log_lines_automagically(f: typing.TextIO) -> Iterator[LogLine]:
     except json.decoder.JSONDecodeError:
         yield from split_simple_lines(data)
 
+
 def parse_log_data_automagically(f: typing.TextIO) -> Model:
     lines = parse_log_lines_automagically(f)
     return parse_postgres_lines(list(lines))
+
 
 if __name__ == "__main__":
     stmts = []
