@@ -1,4 +1,4 @@
-from .pglogviz import *
+from .pg_lupa import *
 
 TINY_LOG_DATA = """
 2022-05-22 10:50:29 CEST [2929634-1] [unknown]@[unknown] LOG:  connection received: host=1.2.3.4 port=37562

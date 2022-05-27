@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "pglogviz"
+name = "pg_lupa"
 version = "0.1.0"
 description = ""
 authors = ["Steinar V. Kaldager <steinar.kaldager@oda.com>"]
