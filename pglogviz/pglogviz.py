@@ -6,7 +6,8 @@ import json
 import random
 import re
 import sys
-from typing import Optional
+import typing
+from typing import Optional, Iterator
 
 import dateutil.parser
 import pydantic
@@ -495,7 +496,7 @@ def render_statement_mouseover_content(stmt: Statement) -> str:
     )
 
 
-def visualize(model: Model):
+def visualize(model: Model, out: typing.TextIO):
     statements = list(model.statements)
     pids = {process.pid: i for i, process in enumerate(model.processes)}
 
@@ -564,12 +565,10 @@ def visualize(model: Model):
 
     json_data = rec.json(indent=2)
     rendered = template.replace("%JSON_DATA%", json_data)
-    print(rendered)
+    print(rendered, file=out)
 
 
-def ingest_logs_google_json(data):
-    records = json.loads(data)
-
+def ingest_logs_google_json(records):
     carriage_return = "\r"
 
     for record in records:
@@ -707,6 +706,18 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
         processes=processes,
     )
 
+def parse_log_lines_automagically(f: typing.TextIO) -> Iterator[LogLine]:
+    data = f.read()
+
+    try:
+        json_record = json.loads(data)
+        yield from ingest_logs_google_json(json_record)
+    except json.decoder.JSONDecodeError:
+        yield from split_simple_lines(data)
+
+def parse_log_data_automagically(f: typing.TextIO) -> Model:
+    lines = parse_log_lines_automagically(f)
+    return parse_postgres_lines(list(lines))
 
 if __name__ == "__main__":
     stmts = []
@@ -714,4 +725,4 @@ if __name__ == "__main__":
     data = sys.stdin.read()
     lines = ingest_logs_google_json(data)
     model = parse_postgres_lines(lines)
-    visualize(model)
+    visualize(model, out)
