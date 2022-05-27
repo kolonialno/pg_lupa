@@ -1,24 +1,26 @@
-import re
-import enum
-import pydantic
 import collections
-import random
 import colorsys
-import json
 import datetime
+import enum
+import json
+import random
+import re
 import sys
-import dateutil.parser
-import pytz
-
 from typing import Optional
+
+import dateutil.parser
+import pydantic
+import pytz
 
 TZMAPPING = {
     "CET": pytz.timezone("Europe/Oslo"),
     "CEST": pytz.timezone("Europe/Oslo"),
 }
 
+
 def parse_date(s: str) -> datetime.datetime:
     return dateutil.parser.parse(s, tzinfos=TZMAPPING)
+
 
 # log_line_prefix from postgresql.conf
 # Keys refer to src/backend/utils/error/elog.c
@@ -37,7 +39,8 @@ NEW_STYLE_LOG_PREFIX_RE = re.compile(
     r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] ([A-Za-z0-9]+)@([A-Za-z0-9]+) [(]([^)]+)[)]$"
 )
 
-DURATION_LINE_RE = re.compile(r"^([0-9]+[.][0-9]{3}) ms +statement: (.*)$")
+DURATION_LINE_RE = re.compile(r"^([0-9]+[.][0-9]{3}) ms +statement:(.*)$")
+
 
 class LogLine(pydantic.BaseModel):
     timestamp: Optional[datetime.datetime] = None
@@ -75,6 +78,7 @@ def parse_holding_lock_log_line(s: str) -> HoldingLockLogEntry:
 class Statement(pydantic.BaseModel):
     start_time: datetime.datetime
     end_time: datetime.datetime
+    context: LogPrefixInfo
     pid: int
     log_line_no: int
     statement: str
@@ -216,7 +220,6 @@ def parse_log_prefix(prefix: str) -> LogPrefixInfo:
             application_name=app,
         )
 
-
     raise RuntimeError(f"Malformed log prefix: {prefix}")
 
 
@@ -244,6 +247,7 @@ def create_statement(context: LogPrefixInfo, entry: DurationLogEntry) -> Stateme
     return Statement(
         start_time=t0,
         end_time=t1,
+        context=context,
         duration=duration.total_seconds(),
         pid=context.pid,
         log_line_no=context.log_line_no,
@@ -425,8 +429,31 @@ draw();
 """
 
 
+def render_context_table(context: LogPrefixInfo) -> str:
+    comp = []
+
+    if context.pid:
+        comp.append(f"<p><b>PID</b>: {context.pid}</p>")
+
+    if context.log_line_no:
+        comp.append(f"<p><b>Log line no.</b>: {context.log_line_no}</p>")
+
+    if context.username:
+        comp.append(f"<p><b>Username</b>: {context.username}</p>")
+
+    if context.database:
+        comp.append(f"<p><b>Database</b>: {context.database}</p>")
+
+    if context.application_name:
+        comp.append(f"<p><b>Application</b>: {context.application_name}</p>")
+
+    return "\n".join(comp)
+
+
 def render_event_mouseover_content(evt: Event) -> str:
-    return f"""
+    return (
+        render_context_table(evt.context)
+        + f"""
 <p>
   <b>Time</b>: {evt.time.isoformat()}
 </p>
@@ -435,6 +462,7 @@ def render_event_mouseover_content(evt: Event) -> str:
   <b>Event</b>: {evt.event_type}
 </p>
 """.strip()
+    )
 
 
 def render_statement_mouseover_content(stmt: Statement) -> str:
@@ -443,17 +471,15 @@ def render_statement_mouseover_content(stmt: Statement) -> str:
 
     duration = stmt.end_time - stmt.start_time
 
-    return f"""
+    return (
+        render_context_table(stmt.context)
+        + f"""
 <p>
   <b>Start</b>: {t0.isoformat()}
 </p>
 
 <p>
   <b>End</b>: {t1.isoformat()}
-</p>
-
-<p>
-  <b>PID</b>: {stmt.pid}
 </p>
 
 <p>
@@ -464,6 +490,7 @@ def render_statement_mouseover_content(stmt: Statement) -> str:
   {stmt.statement}
 </p>
 """.strip()
+    )
 
 
 def visualize(model: Model):
@@ -569,6 +596,7 @@ def split_simple_lines(data: str) -> list[LogLine]:
         rv.append(LogLine(line=line))
 
     return rv
+
 
 def parse_postgres_lines(lines: list[LogLine]) -> Model:
     stmts_by_process = collections.defaultdict(list)

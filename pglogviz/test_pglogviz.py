@@ -13,15 +13,17 @@ some other noise
 2022-05-22 10:57:42 CEST [2857466-96] foo@foo DETAIL:  Process holding the lock: 2845932. Wait queue: 2864876, 2857466.
 """
 
+
 def test_parse_holding_lock_log_line():
     entry = parse_holding_lock_log_line("2845932. Wait queue: 2864876, 2857466.")
     assert entry == HoldingLockLogEntry(
-        holding_lock_pid = 2845932,
-        wait_queue_pid = (
+        holding_lock_pid=2845932,
+        wait_queue_pid=(
             2864876,
             2857466,
         ),
     )
+
 
 def test_parse_log_prefix_old_style():
     prefix = """2022-05-22 11:09:34 CEST [2949465-9] username@database """
@@ -32,6 +34,7 @@ def test_parse_log_prefix_old_style():
     assert entry.database == "database"
     oslo = pytz.timezone("Europe/Oslo")
     assert entry.timestamp == datetime.datetime(2022, 5, 22, 11, 9, 34, tzinfo=oslo)
+
 
 def test_parse_log_prefix_new_style():
     prefix = """2022-05-22 11:09:34 CEST [1011111-38] username@database (foo@bar-quux-default-123456-abc78)"""
@@ -44,21 +47,24 @@ def test_parse_log_prefix_new_style():
     oslo = pytz.timezone("Europe/Oslo")
     assert entry.timestamp == datetime.datetime(2022, 5, 22, 11, 9, 34, tzinfo=oslo)
 
+
 def test_parse_tiny_log():
     model = parse_postgres_lines(split_simple_lines(TINY_LOG_DATA))
     assert len(model.events) == 6
     assert len(model.statements) == 1
     assert len(model.processes) == 9
-    
+
+
 def test_visualize_tiny_log():
     model = parse_postgres_lines(split_simple_lines(TINY_LOG_DATA))
     visualize(model)
-    
+
+
 def test_parse_holding_lock_log_line():
     entry = parse_holding_lock_log_line("2845932. Wait queue: 2864876, 2857466.")
     assert entry == HoldingLockLogEntry(
-        holding_lock_pid = 2845932,
-        wait_queue_pid = (
+        holding_lock_pid=2845932,
+        wait_queue_pid=(
             2864876,
             2857466,
         ),
