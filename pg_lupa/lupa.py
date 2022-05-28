@@ -55,6 +55,7 @@ NEW_STYLE_LOG_PREFIX_RE = re.compile(
 )
 
 DURATION_LINE_RE = re.compile(r"^([0-9]+[.][0-9]{3}) ms +statement:(.*)$")
+DURATION_LINE_WITHOUT_STATEMENT_RE = re.compile(r"^([0-9]+[.][0-9]{3}) ms$")
 
 
 class LogLine(pydantic.BaseModel):
@@ -73,7 +74,7 @@ class LogPrefixInfo(pydantic.BaseModel):
 
 class DurationLogEntry(pydantic.BaseModel):
     duration_usec: int
-    statement: str
+    statement: Optional[str]
 
 
 class HoldingLockLogEntry(pydantic.BaseModel):
@@ -245,16 +246,25 @@ def parse_duration_log_line(line: str) -> Optional[DurationLogEntry]:
     line = get_first_line(line).strip()
 
     m = DURATION_LINE_RE.match(line)
-    if not m:
-        return None
+    if m:
+        duration_usec = m.group(1).replace(".", "")
+        statement = m.group(2)
 
-    duration_usec = m.group(1).replace(".", "")
-    statement = m.group(2)
+        return DurationLogEntry(
+            duration_usec=int(duration_usec),
+            statement=statement,
+        )
 
-    return DurationLogEntry(
-        duration_usec=int(duration_usec),
-        statement=statement,
-    )
+    m = DURATION_LINE_WITHOUT_STATEMENT_RE.match(line)
+    if m:
+        duration_usec = m.group(1).replace(".", "")
+
+        return DurationLogEntry(
+            duration_usec=int(duration_usec),
+            statement=None,
+        )
+
+    raise RuntimeError(f"Malformed duration log line: {line}")
 
 
 def create_statement(context: LogPrefixInfo, entry: DurationLogEntry) -> Statement:
@@ -269,7 +279,7 @@ def create_statement(context: LogPrefixInfo, entry: DurationLogEntry) -> Stateme
         duration=duration.total_seconds(),
         pid=context.pid,
         log_line_no=context.log_line_no,
-        statement=entry.statement,
+        statement=entry.statement or "",
     )
 
 
@@ -692,7 +702,7 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
         "ERROR:  deadlock detected": handle_deadlock_detected,
     }
 
-    for line in lines:
+    def try_parse(line: LogLine):
         for key, func in dispatch.items():
             if key in line.line:
                 prefix, _, core = line.line.partition(key)
@@ -706,6 +716,14 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
 
                 func(context, core)
                 break
+
+    for i, line in enumerate(lines):
+        try:
+            try_parse(line)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to parse log line #{i+1}: {repr(line.line)}"
+            ) from e
 
     processes = []
     for pid in sorted(pids):
