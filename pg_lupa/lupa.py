@@ -378,17 +378,21 @@ def classify_sql(sql: str) -> str:
     return sql
 
 
-def hash_as_colour(s: str) -> str:
+def generate_colours(n: int) -> list[str]:
     rng = random.Random()
-    rng.seed(s)
-    for _ in range(100):
-        hue = rng.random()
+    rng.seed(12345678)
+    offset = rng.random()
+
+    rv: list[str] = []
+
+    for i in range(n):
+        hue = (i / n + offset) % 1.0
         saturation = 1.0
         value = 1.0
         rgb = [int(x * 255) for x in colorsys.hsv_to_rgb(hue, saturation, value)]
-        if sufficient_contrast_with_white(rgb):
-            break
-    return "#" + "".join(["{:02X}".format(x) for x in rgb])
+        rv.append("#" + "".join(["{:02X}".format(x) for x in rgb]))
+
+    return rv
 
 
 DEFAULT_LOG_PREFIX_MATCHERS = [
@@ -760,9 +764,17 @@ def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = 
             )
         )
 
+    classes = set()
+    for stmt in statements:
+        classes.add(classify_sql(stmt.statement))
+
+    colours = {}
+    for cls, col in zip(sorted(classes), generate_colours(len(classes))):
+        colours[cls] = col
+
     for i, stmt in enumerate(statements):
         name = f"stmt{i+1}"
-        col = hash_as_colour(classify_sql(stmt.statement))
+        col = colours[classify_sql(stmt.statement)]
         t0 = stmt.start_time.timestamp()
         t1 = stmt.end_time.timestamp()
         rec.statements.append(
