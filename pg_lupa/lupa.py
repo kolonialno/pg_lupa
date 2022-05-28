@@ -5,8 +5,9 @@ import enum
 import json
 import random
 import re
+import string
 import typing
-from typing import Iterator, Optional
+from typing import Callable, Iterator, Optional
 
 import dateutil.parser
 import pydantic
@@ -37,27 +38,6 @@ def parse_date(s: str) -> datetime.datetime:
     return dateutil.parser.parse(s, tzinfos=TZMAPPING)
 
 
-# log_line_prefix from postgresql.conf
-# Keys refer to src/backend/utils/error/elog.c
-# %t -- time in %Y-%m-%d %H:%M:%S %Z format
-# %p -- process ID
-# %l -- log line number (within process)
-# %u -- username
-# %d -- database name
-LOG_LINE_PREFIX = "%t [%p-%l] %q%u@%d"
-
-OLD_STYLE_LOG_PREFIX_RE = re.compile(
-    r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] *(?:([A-Za-z0-9_-]+)@([A-Za-z0-9_-]+))?$"
-)
-
-NEW_STYLE_LOG_PREFIX_RE = re.compile(
-    r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] *(?:([A-Za-z0-9_-]+)@([A-Za-z0-9_-]+) [(]([^)]+)[)])?$"
-)
-
-DEFAULT_LOG_PREFIX_RE = re.compile(
-    r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]+ [A-Za-z]+) \[([0-9]+)] *$"
-)
-
 DURATION_LINE_RE = re.compile(r"^([0-9]+[.][0-9]{3}) ms +statement:(.*)$")
 DURATION_LINE_WITHOUT_STATEMENT_RE = re.compile(r"^([0-9]+[.][0-9]{3}) ms$")
 
@@ -74,6 +54,186 @@ class LogPrefixInfo(pydantic.BaseModel):
     username: Optional[str] = None
     database: Optional[str] = None
     application_name: Optional[str] = None
+
+
+def _make_prefix_parser(
+    log_prefix_format: str,
+) -> Callable[[str], Optional[LogPrefixInfo]]:
+    # log_line_prefix from postgresql.conf
+    re_comp = ["^"]
+
+    closers: list[str] = []
+
+    okay_regex_literals = set(string.ascii_letters + string.digits + " ")
+
+    already_used_percent_codes = set()
+    already_used_fields = set()
+
+    process_letter: list[Callable[[str], None]] = []
+    handlers: list[Callable[[re.Match, LogPrefixInfo], None]] = []
+
+    def use_field(field: str):
+        if field in already_used_fields:
+            raise ValueError(f"cannot use {field} twice")
+        already_used_fields.add(field)
+
+    def add_literal_char(ch):
+        if ch in okay_regex_literals:
+            re_comp.append(ch)
+        else:
+            re_comp.append("\\" + hex(ord(ch))[1:])
+
+    def add_timestamp_pattern():
+        re_comp.append(
+            r"""(?P<timestamp>[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:[.][0-9]+)? [A-Za-z]+)"""
+        )
+        use_field("timestamp")
+
+        def capture(m, info):
+            info.timestamp = parse_date(m.group("timestamp"))
+
+        handlers.append(capture)
+
+    def add_pid_pattern():
+        re_comp.append(r"""(?P<pid>[0-9]+)""")
+        use_field("pid")
+
+        def capture(m, info):
+            info.pid = int(m.group("pid"))
+
+        handlers.append(capture)
+
+    def add_log_line_pattern():
+        re_comp.append(r"""(?P<log_line>[0-9]+)""")
+        use_field("log_line")
+
+        def capture(m, info):
+            info.log_line_no = int(m.group("log_line"))
+
+        handlers.append(capture)
+
+    def add_username_pattern():
+        re_comp.append(r"""(?P<username>[A-Za-z0-9_-]+)""")
+        use_field("username")
+
+        def capture(m, info):
+            info.username = m.group("username")
+
+        handlers.append(capture)
+
+    def add_database_pattern():
+        re_comp.append(r"""(?P<database>[A-Za-z0-9_-]+)""")
+        use_field("database")
+
+        def capture(m, info):
+            info.database = m.group("database")
+
+        handlers.append(capture)
+
+    def add_application_name_pattern():
+        re_comp.append(r"""(?P<application_name>.+)""")
+        use_field("application_name")
+
+        def capture(m, info):
+            info.application_name = m.group("application_name")
+
+        handlers.append(capture)
+
+    def add_optional_section():
+        re_comp.append("(?:")
+        closers.append(")?")
+
+    # Keys refer to src/backend/utils/error/elog.c
+    percent_codes = {
+        "t": add_timestamp_pattern,
+        "m": add_timestamp_pattern,
+        "p": add_pid_pattern,
+        "u": add_username_pattern,
+        "d": add_database_pattern,
+        "l": add_log_line_pattern,
+        "a": add_application_name_pattern,
+        "q": add_optional_section,
+        "%": lambda: add_literal_char("%"),
+    }
+
+    def consume_percent_code(ch):
+        if ch in already_used_percent_codes:
+            if ch != "%":
+                raise ValueError(f"formatting code %{ch} used twice in log_line_prefix")
+
+        try:
+            callback = percent_codes[ch]
+        except KeyError:
+            raise ValueError(f"unknown or unsupported formatting code %{ch}")
+
+        callback()
+        process_letter[0] = consume
+        already_used_percent_codes.add(ch)
+
+    def consume(ch):
+        if ch == "%":
+            process_letter[0] = consume_percent_code
+        else:
+            add_literal_char(ch)
+
+    process_letter.append(consume)
+
+    for letter in log_prefix_format:
+        process_letter[0](letter)
+
+    if "p" not in already_used_percent_codes:
+        raise ValueError("log_line_prefix pattern must contain %p")
+
+    if "t" not in already_used_percent_codes and "m" not in already_used_percent_codes:
+        raise ValueError("log_line_prefix pattern must contain %t or %m")
+
+    for segment in reversed(closers):
+        re_comp.append(segment)
+
+    re_comp.append("$")
+
+    compilable_regex = "".join(re_comp)
+
+    compiled_regex = re.compile(compilable_regex)
+
+    default_pid = 0
+    default_datetime = datetime.datetime(1970, 1, 1)
+
+    def apply(s: str) -> Optional[LogPrefixInfo]:
+        m = compiled_regex.match(s)
+        if not m:
+            return None
+
+        return_value = LogPrefixInfo(
+            timestamp=default_datetime,
+            pid=default_pid,
+        )
+
+        for h in handlers:
+            h(m, return_value)
+
+        if return_value.timestamp == default_datetime:
+            raise RuntimeError(
+                "log_line_prefix pattern not valid: didn't capture timestamp"
+            )
+
+        if return_value.pid == default_pid:
+            raise RuntimeError("log_line_prefix pattern not valid: didn't capture pid")
+
+        return return_value
+
+    return apply
+
+
+def make_prefix_parser(
+    log_line_prefix: str,
+) -> Callable[[str], Optional[LogPrefixInfo]]:
+    try:
+        return _make_prefix_parser(log_line_prefix)
+    except ValueError as e:
+        raise ValueError(
+            f"Invalid log_prefix_line format {repr(log_line_prefix)}: {e}"
+        ) from e
 
 
 class DurationLogEntry(pydantic.BaseModel):
@@ -138,6 +298,10 @@ class ProcessSortOrder(str, enum.Enum):
 
 class VizOptions(pydantic.BaseModel):
     process_sort_order: ProcessSortOrder = ProcessSortOrder.TIME
+
+
+class ParseOptions(pydantic.BaseModel):
+    log_line_prefix_format: Optional[str] = None
 
 
 EVENT_COLOURS = {
@@ -221,54 +385,28 @@ def hash_as_colour(s: str) -> str:
     return "#" + "".join(["{:02X}".format(x) for x in rgb])
 
 
-def parse_log_prefix(prefix: str) -> LogPrefixInfo:
-    prefix = prefix.strip()
+DEFAULT_LOG_PREFIX_MATCHERS = [
+    make_prefix_parser("%t [%p-%l] %q%u@%d"),
+    make_prefix_parser("%t [%p-%l] %q%u@%d (%a)"),
+    make_prefix_parser("%m [%p]"),
+]
 
-    m = DEFAULT_LOG_PREFIX_RE.match(prefix)
-    if m:
-        timestamp = m.group(1)
-        process_id = m.group(2)
 
-        return LogPrefixInfo(
-            timestamp=parse_date(timestamp),
-            pid=int(process_id),
-        )
+def parse_log_prefix(
+    prefix: str, matchers: Optional[list[Callable]] = None
+) -> LogPrefixInfo:
+    matchers = matchers or DEFAULT_LOG_PREFIX_MATCHERS
 
-    m = OLD_STYLE_LOG_PREFIX_RE.match(prefix)
-    if m:
-        timestamp = m.group(1)
-        process_id = m.group(2)
-        log_line_no = m.group(3)
-        username = m.group(4)
-        database = m.group(5)
+    for matcher in matchers:
+        rv = matcher(prefix)
+        if rv:
+            return rv
 
-        return LogPrefixInfo(
-            timestamp=parse_date(timestamp),
-            pid=int(process_id),
-            log_line_no=int(log_line_no),
-            username=username,
-            database=database,
-        )
+        rv = matcher(prefix.strip())
+        if rv:
+            return rv
 
-    m = NEW_STYLE_LOG_PREFIX_RE.match(prefix)
-    if m:
-        timestamp = m.group(1)
-        process_id = m.group(2)
-        log_line_no = m.group(3)
-        username = m.group(4)
-        database = m.group(5)
-        app = m.group(6)
-
-        return LogPrefixInfo(
-            timestamp=parse_date(timestamp),
-            pid=int(process_id),
-            log_line_no=int(log_line_no),
-            username=username,
-            database=database,
-            application_name=app,
-        )
-
-    raise RuntimeError(f"Malformed log prefix: {prefix}")
+    raise ValueError(f"Log prefix {repr(prefix)} not matched by any known pattern")
 
 
 def parse_duration_log_line(line: str) -> Optional[DurationLogEntry]:
@@ -675,7 +813,15 @@ def get_first_line(full_entry: str) -> str:
     return full_entry.splitlines()[0]
 
 
-def parse_postgres_lines(lines: list[LogLine]) -> Model:
+def parse_postgres_lines(
+    lines: list[LogLine], options: Optional[ParseOptions] = None
+) -> Model:
+    options = options or ParseOptions()
+
+    prefix_matchers = []
+    if options.log_line_prefix_format:
+        prefix_matchers.append(make_prefix_parser(options.log_line_prefix_format))
+
     stmts_by_process = collections.defaultdict(list)
     events = []
 
@@ -791,7 +937,7 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
             if key in line.line:
                 prefix, _, core = line.line.partition(key)
 
-                context = parse_log_prefix(prefix)
+                context = parse_log_prefix(prefix, prefix_matchers)
                 if line.timestamp:
                     context.timestamp = line.timestamp
 
@@ -857,6 +1003,8 @@ def parse_log_lines_automagically(f: typing.TextIO) -> Iterator[LogLine]:
     yield from merge_continuation_lines(_parse_unmerged_log_lines(f))
 
 
-def parse_log_data_automagically(f: typing.TextIO) -> Model:
+def parse_log_data_automagically(
+    f: typing.TextIO, options: Optional[ParseOptions] = None
+) -> Model:
     lines = parse_log_lines_automagically(f)
-    return parse_postgres_lines(list(lines))
+    return parse_postgres_lines(list(lines), options)

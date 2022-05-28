@@ -1,11 +1,13 @@
 import datetime
 import io
 
+import pytest
 import pytz
 
 from .lupa import (
     HoldingLockLogEntry,
     classify_sql,
+    make_prefix_parser,
     parse_duration_log_line,
     parse_holding_lock_log_line,
     parse_log_lines_automagically,
@@ -165,3 +167,68 @@ def test_continuation_lines():
         == "2022-05-22 10:50:29 CEST [2929626-2] log line two\n\tcontinuation data\n\tmore data"
     )
     assert lines[2].line == "2022-05-22 10:50:29 CEST [2929626-2] log line three"
+
+
+def test_constructed_matchers_make_default():
+    matcher = make_prefix_parser("%m [%p] ")
+    assert matcher("2022-05-22 10:50:29.123 CEST [2929634] ")
+    assert matcher("2022-05-22 10:50:29.123 CEST [2929634] ").pid == 2929634
+    assert matcher("2022-05-22 10:50:29.123 CEST [2929634] ").timestamp.month == 5
+
+
+def test_invalid_make_matchers():
+    with pytest.raises(ValueError):
+        make_prefix_parser("%m %p %m %p")
+
+    with pytest.raises(ValueError):
+        make_prefix_parser("%m")
+
+    with pytest.raises(ValueError):
+        make_prefix_parser("%!")
+
+
+def test_constructed_matchers_make_old_style():
+    matcher = make_prefix_parser("%t [%p-%l] %q%u@%d")
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] foo@bar")
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] foo@bar").username == "foo"
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] foo@bar").database == "bar"
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] foo@bar").pid == 2929634
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] foo@bar").log_line_no == 1
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] foo@bar").timestamp.month == 5
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] ")
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] ").username is None
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] ").database is None
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] ").pid == 2929634
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] ").log_line_no == 1
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] ").timestamp.month == 5
+
+
+def test_constructed_matchers_make_new_style():
+    matcher = make_prefix_parser("%t [%p-%l] %q%u@%d (%a)")
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] foo@bar (x)")
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] foo@bar (x)").username == "foo"
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] foo@bar (x)").database == "bar"
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] foo@bar (x)").pid == 2929634
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] foo@bar (x)").log_line_no == 1
+    assert (
+        matcher("2022-05-22 10:50:29 CEST [2929634-1] foo@bar (x)").timestamp.month == 5
+    )
+    assert (
+        matcher("2022-05-22 10:50:29 CEST [2929634-1] foo@bar (x)").application_name
+        == "x"
+    )
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] ")
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] ").username is None
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] ").database is None
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] ").pid == 2929634
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] ").log_line_no == 1
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] ").timestamp.month == 5
+    assert matcher("2022-05-22 10:50:29 CEST [2929634-1] ").application_name is None
+
+
+def test_constructed_matchers_fancy_application_name():
+    matcher = make_prefix_parser("%t %p <%a> %l")
+    parsed = matcher(
+        "2022-05-22 10:50:29 CEST 1 <hello world! this is my fancy app name...? :>> 2"
+    )
+    assert parsed.application_name == "hello world! this is my fancy app name...? :>"
