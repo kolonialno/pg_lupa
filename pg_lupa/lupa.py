@@ -56,9 +56,9 @@ class LogPrefixInfo(pydantic.BaseModel):
     application_name: Optional[str] = None
 
 
-def _make_prefix_parser(
+def _make_prefix_regex(
     log_prefix_format: str,
-) -> Callable[[str], Optional[LogPrefixInfo]]:
+) -> str:
     # log_line_prefix from postgresql.conf
     re_comp = ["^"]
 
@@ -67,15 +67,8 @@ def _make_prefix_parser(
     okay_regex_literals = set(string.ascii_letters + string.digits + " ")
 
     already_used_percent_codes = set()
-    already_used_fields = set()
 
     process_letter: list[Callable[[str], None]] = []
-    handlers: list[Callable[[re.Match, LogPrefixInfo], None]] = []
-
-    def use_field(field: str):
-        if field in already_used_fields:
-            raise ValueError(f"cannot use {field} twice")
-        already_used_fields.add(field)
 
     def add_literal_char(ch):
         if ch in okay_regex_literals:
@@ -87,57 +80,21 @@ def _make_prefix_parser(
         re_comp.append(
             r"""(?P<timestamp>[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:[.][0-9]+)? [A-Za-z]+)"""
         )
-        use_field("timestamp")
-
-        def capture(m, info):
-            info.timestamp = parse_date(m.group("timestamp"))
-
-        handlers.append(capture)
 
     def add_pid_pattern():
         re_comp.append(r"""(?P<pid>[0-9]+)""")
-        use_field("pid")
-
-        def capture(m, info):
-            info.pid = int(m.group("pid"))
-
-        handlers.append(capture)
 
     def add_log_line_pattern():
-        re_comp.append(r"""(?P<log_line>[0-9]+)""")
-        use_field("log_line")
-
-        def capture(m, info):
-            info.log_line_no = int(m.group("log_line"))
-
-        handlers.append(capture)
+        re_comp.append(r"""(?P<log_line_no>[0-9]+)""")
 
     def add_username_pattern():
         re_comp.append(r"""(?P<username>[A-Za-z0-9_-]+)""")
-        use_field("username")
-
-        def capture(m, info):
-            info.username = m.group("username")
-
-        handlers.append(capture)
 
     def add_database_pattern():
         re_comp.append(r"""(?P<database>[A-Za-z0-9_-]+)""")
-        use_field("database")
-
-        def capture(m, info):
-            info.database = m.group("database")
-
-        handlers.append(capture)
 
     def add_application_name_pattern():
         re_comp.append(r"""(?P<application_name>.+)""")
-        use_field("application_name")
-
-        def capture(m, info):
-            info.application_name = m.group("application_name")
-
-        handlers.append(capture)
 
     def add_optional_section():
         re_comp.append("(?:")
@@ -191,10 +148,56 @@ def _make_prefix_parser(
         re_comp.append(segment)
 
     re_comp.append("$")
+    return "".join(re_comp)
 
-    compilable_regex = "".join(re_comp)
 
-    compiled_regex = re.compile(compilable_regex)
+def _make_prefix_parser(
+    log_prefix_format: str,
+) -> Callable[[str], Optional[LogPrefixInfo]]:
+    return _make_prefix_parser_from_regex(_make_prefix_regex(log_prefix_format))
+
+
+def _make_prefix_parser_from_regex(
+    regex: str,
+) -> Callable[[str], Optional[LogPrefixInfo]]:
+    compiled_regex = re.compile(regex)
+
+    active_handlers: dict[str, Callable[[str, LogPrefixInfo], None]] = {}
+
+    def handle_timestamp(value: str, info: LogPrefixInfo) -> None:
+        info.timestamp = parse_date(value)
+
+    def handle_pid(value: str, info: LogPrefixInfo) -> None:
+        info.pid = int(value)
+
+    def handle_log_line_no(value: str, info: LogPrefixInfo) -> None:
+        info.log_line_no = int(value)
+
+    def handle_username(value: str, info: LogPrefixInfo) -> None:
+        info.username = value
+
+    def handle_database(value: str, info: LogPrefixInfo) -> None:
+        info.database = value
+
+    def handle_application_name(value: str, info: LogPrefixInfo) -> None:
+        info.application_name = value
+
+    handlers = {
+        "timestamp": handle_timestamp,
+        "pid": handle_pid,
+        "log_line_no": handle_log_line_no,
+        "username": handle_username,
+        "database": handle_database,
+        "application_name": handle_application_name,
+    }
+
+    for name in compiled_regex.groupindex:
+        try:
+            handler = handlers[name]
+        except KeyError:
+            raise ValueError(f"unknown field: {repr(name)}")
+        else:
+            active_handlers[name] = handler
 
     default_pid = 0
     default_datetime = datetime.datetime(1970, 1, 1)
@@ -209,8 +212,10 @@ def _make_prefix_parser(
             pid=default_pid,
         )
 
-        for h in handlers:
-            h(m, return_value)
+        for key, h in active_handlers.items():
+            value = m.group(key)
+            if value:
+                h(value, return_value)
 
         if return_value.timestamp == default_datetime:
             raise RuntimeError(
@@ -302,6 +307,7 @@ class VizOptions(pydantic.BaseModel):
 
 class ParseOptions(pydantic.BaseModel):
     log_line_prefix_format: Optional[str] = None
+    log_line_prefix_regex: Optional[str] = None
 
 
 EVENT_COLOURS = {
@@ -821,6 +827,14 @@ def parse_postgres_lines(
     prefix_matchers = []
     if options.log_line_prefix_format:
         prefix_matchers.append(make_prefix_parser(options.log_line_prefix_format))
+
+    if options.log_line_prefix_regex:
+        # The regex will be long and ugly.
+        # It's available as a fallback for people who use options not supported by the
+        # format-string parser.
+        prefix_matchers.append(
+            _make_prefix_parser_from_regex(options.log_line_prefix_regex)
+        )
 
     stmts_by_process = collections.defaultdict(list)
     events = []
