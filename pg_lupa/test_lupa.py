@@ -16,7 +16,7 @@ from .lupa import (
 
 TINY_LOG_DATA = """
 2022-05-22 10:50:29 CEST [2929634-1] [unknown]@[unknown] LOG:  connection received: host=1.2.3.4 port=37562
-2022-05-22 10:50:29 CEST [2929634-2] foo@foo LOG:  connection authorized: user=foo database=foo
+2022-05-22 10:50:29 CEST [2929634-2] hello-world@foo_bar LOG:  connection authorized: user=foo database=foo
 2022-05-22 10:50:29 CEST [2929626-2] LOG:  automatic analyze of table "foo" system usage: CPU: user: 0.00 s, system: 0.01 s, elapsed: 1.18 s
 2022-05-22 10:50:43 CEST [2864876-56] foo@foo LOG:  duration: 1074.754 ms  statement: SELECT stuff FROM mytbl WHERE x = 1
 2022-05-22 10:50:52 CEST [2909723-29] foo@foo DETAIL:  Process holding the lock: 2864876. Wait queue: 2909723.

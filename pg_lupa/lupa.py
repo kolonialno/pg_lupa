@@ -47,11 +47,11 @@ def parse_date(s: str) -> datetime.datetime:
 LOG_LINE_PREFIX = "%t [%p-%l] %q%u@%d"
 
 OLD_STYLE_LOG_PREFIX_RE = re.compile(
-    r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] ([A-Za-z0-9]+)@([A-Za-z0-9]+)$"
+    r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] ([A-Za-z0-9_-]+)@([A-Za-z0-9_-]+)$"
 )
 
 NEW_STYLE_LOG_PREFIX_RE = re.compile(
-    r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] ([A-Za-z0-9]+)@([A-Za-z0-9]+) [(]([^)]+)[)]$"
+    r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] ([A-Za-z0-9_-]+)@([A-Za-z0-9_-]+) [(]([^)]+)[)]$"
 )
 
 DURATION_LINE_RE = re.compile(r"^([0-9]+[.][0-9]{3}) ms +statement:(.*)$")
@@ -614,8 +614,11 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
     pids = set()
 
     def handle_duration(context, core):
-        parsed = parse_duration_log_line(core)
-        assert parsed
+        first_line = core.splitlines()[0]
+
+        parsed = parse_duration_log_line(first_line)
+        if not parsed:
+            raise RuntimeError(f"Unable to parse duration log line: {core}")
 
         stmt = create_statement(context, parsed)
         assert stmt.pid
