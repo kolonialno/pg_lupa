@@ -82,7 +82,9 @@ class HoldingLockLogEntry(pydantic.BaseModel):
 
 
 def parse_holding_lock_log_line(s: str) -> HoldingLockLogEntry:
-    first_pid, _, remaining_pids = s.strip().strip(".").partition(". Wait queue: ")
+    first_pid, _, remaining_pids = (
+        get_first_line(s).strip().strip(".").partition(". Wait queue: ")
+    )
 
     return HoldingLockLogEntry(
         holding_lock_pid=int(first_pid),
@@ -240,7 +242,7 @@ def parse_log_prefix(prefix: str) -> LogPrefixInfo:
 
 
 def parse_duration_log_line(line: str) -> Optional[DurationLogEntry]:
-    line = line.strip()
+    line = get_first_line(line).strip()
 
     m = DURATION_LINE_RE.match(line)
     if not m:
@@ -607,6 +609,13 @@ def split_simple_lines(data: str) -> list[LogLine]:
     return rv
 
 
+def get_first_line(full_entry: str) -> str:
+    # In multiline logs from many different processes, occasionally lines get intermingled.
+    # In single-line contexts, discard any additional lines that may have accidentally
+    # attached themselves.
+    return full_entry.splitlines()[0]
+
+
 def parse_postgres_lines(lines: list[LogLine]) -> Model:
     stmts_by_process = collections.defaultdict(list)
     events = []
@@ -614,9 +623,7 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
     pids = set()
 
     def handle_duration(context, core):
-        first_line = core.splitlines()[0]
-
-        parsed = parse_duration_log_line(first_line)
+        parsed = parse_duration_log_line(core)
         if not parsed:
             raise RuntimeError(f"Unable to parse duration log line: {core}")
 
