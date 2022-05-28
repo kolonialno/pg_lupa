@@ -737,8 +737,6 @@ def parse_log_data_automagically(f: typing.TextIO) -> Model:
 
 
 if __name__ == "__main__":
-    stmts = []
-
     data = sys.stdin.read()
     lines = ingest_logs_google_json(data)
     model = parse_postgres_lines(lines)
