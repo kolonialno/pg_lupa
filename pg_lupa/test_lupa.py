@@ -1,16 +1,17 @@
-import io
-import pytz
 import datetime
+import io
+
+import pytz
 
 from .lupa import (
-    parse_holding_lock_log_line,
-    split_simple_lines,
-    classify_sql,
-    parse_log_prefix,
-    visualize,
-    parse_postgres_lines,
-    parse_log_lines_automagically,
     HoldingLockLogEntry,
+    classify_sql,
+    parse_holding_lock_log_line,
+    parse_log_lines_automagically,
+    parse_log_prefix,
+    parse_postgres_lines,
+    split_simple_lines,
+    visualize,
 )
 
 TINY_LOG_DATA = """

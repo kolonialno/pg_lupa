@@ -6,7 +6,6 @@ repos:
       entry: poetry run black
       language: system
       types: [python]
-      exclude: ^.*\b(migrations)\b.*$
     - id: isort
       name: isort
       entry: poetry run isort
