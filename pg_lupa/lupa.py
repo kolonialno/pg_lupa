@@ -744,6 +744,7 @@ def _parse_unmerged_log_lines(f: typing.TextIO) -> Iterator[LogLine]:
     except json.decoder.JSONDecodeError:
         yield from split_simple_lines(data)
 
+
 def parse_log_lines_automagically(f: typing.TextIO) -> Iterator[LogLine]:
     yield from merge_continuation_lines(_parse_unmerged_log_lines(f))
 

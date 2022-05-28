@@ -82,6 +82,7 @@ def test_parse_holding_lock_log_line():
         ),
     )
 
+
 def test_continuation_lines():
     testdata = """\
 2022-05-22 10:50:29 CEST [2929626-2] log line one
@@ -93,5 +94,8 @@ def test_continuation_lines():
     lines = list(parse_log_lines_automagically(io.StringIO(testdata)))
     assert len(lines) == 3
     assert lines[0].line == "2022-05-22 10:50:29 CEST [2929626-2] log line one"
-    assert lines[1].line == "2022-05-22 10:50:29 CEST [2929626-2] log line two\n\tcontinuation data\n\tmore data"
+    assert (
+        lines[1].line
+        == "2022-05-22 10:50:29 CEST [2929626-2] log line two\n\tcontinuation data\n\tmore data"
+    )
     assert lines[2].line == "2022-05-22 10:50:29 CEST [2929626-2] log line three"
