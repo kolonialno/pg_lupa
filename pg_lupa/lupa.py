@@ -1022,3 +1022,14 @@ def parse_log_data_automagically(
 ) -> Model:
     lines = parse_log_lines_automagically(f)
     return parse_postgres_lines(list(lines), options)
+
+
+def run_analyzer(
+    *,
+    input_file: typing.TextIO,
+    output_file: typing.TextIO,
+    parse_options: Optional[ParseOptions] = None,
+    viz_options: Optional[VizOptions] = None,
+) -> None:
+    model = parse_log_data_automagically(input_file, parse_options)
+    visualize(model, output_file, viz_options)

@@ -1,5 +1,7 @@
 import datetime
 import io
+import os
+from pathlib import Path
 
 import pytest
 import pytz
@@ -13,9 +15,14 @@ from .lupa import (
     parse_log_lines_automagically,
     parse_log_prefix,
     parse_postgres_lines,
+    run_analyzer,
     split_simple_lines,
     visualize,
 )
+
+SCRIPT_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
+EXAMPLES_DIR = SCRIPT_DIR / ".." / "examples"
+
 
 TINY_LOG_DATA = """
 2022-05-22 10:50:29 CEST [2929634-1] [unknown]@[unknown] LOG:  connection received: host=1.2.3.4 port=37562
@@ -232,3 +239,23 @@ def test_constructed_matchers_fancy_application_name():
         "2022-05-22 10:50:29 CEST 1 <hello world! this is my fancy app name...? :>> 2"
     )
     assert parsed.application_name == "hello world! this is my fancy app name...? :>"
+
+
+def test_main_function_tiny_log_file():
+    input_file = io.StringIO(TINY_LOG_DATA)
+    output_file = io.StringIO()
+    run_analyzer(
+        input_file=input_file,
+        output_file=output_file,
+    )
+    assert output_file.getvalue()
+
+
+def test_main_function_examples_file():
+    with open(EXAMPLES_DIR / "example.log", "r") as input_file:
+        output_file = io.StringIO()
+        run_analyzer(
+            input_file=input_file,
+            output_file=output_file,
+        )
+        assert output_file.getvalue()

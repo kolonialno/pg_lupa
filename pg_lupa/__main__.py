@@ -26,9 +26,12 @@ def main(
         log_line_prefix_regex=log_line_prefix_regex,
     )
 
-    model = lupa.parse_log_data_automagically(input_logs or sys.stdin, parse_options)
-
-    lupa.visualize(model, output_html or sys.stdout, viz_options)
+    lupa.run_analyzer(
+        input_file=input_logs or sys.stdin,
+        output_file=output_html or sys.stdout,
+        parse_options=parse_options,
+        viz_options=viz_options,
+    )
 
 
 if __name__ == "__main__":
