@@ -603,9 +603,7 @@ def split_simple_lines(data: str) -> list[LogLine]:
     rv = []
 
     for line in data.strip().splitlines():
-        line = line.strip()
-
-        if not line:
+        if not line.strip():
             continue
 
         rv.append(LogLine(line=line))
@@ -721,7 +719,23 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
     )
 
 
-def parse_log_lines_automagically(f: typing.TextIO) -> Iterator[LogLine]:
+def merge_continuation_lines(lines: Iterator[LogLine]) -> Iterator[LogLine]:
+    last_line = None
+
+    for line in lines:
+        if not line.line.startswith("\t"):
+            if last_line:
+                yield last_line
+            last_line = line.copy()
+            continue
+
+        last_line.line += "\n" + line.line
+
+    if last_line:
+        yield last_line
+
+
+def _parse_unmerged_log_lines(f: typing.TextIO) -> Iterator[LogLine]:
     data = f.read()
 
     try:
@@ -729,6 +743,9 @@ def parse_log_lines_automagically(f: typing.TextIO) -> Iterator[LogLine]:
         yield from ingest_logs_google_json(json_record)
     except json.decoder.JSONDecodeError:
         yield from split_simple_lines(data)
+
+def parse_log_lines_automagically(f: typing.TextIO) -> Iterator[LogLine]:
+    yield from merge_continuation_lines(_parse_unmerged_log_lines(f))
 
 
 def parse_log_data_automagically(f: typing.TextIO) -> Model:

@@ -1,4 +1,6 @@
-from .pg_lupa import *
+import io
+
+from .lupa import *
 
 TINY_LOG_DATA = """
 2022-05-22 10:50:29 CEST [2929634-1] [unknown]@[unknown] LOG:  connection received: host=1.2.3.4 port=37562
@@ -57,7 +59,7 @@ def test_parse_tiny_log():
 
 def test_visualize_tiny_log():
     model = parse_postgres_lines(split_simple_lines(TINY_LOG_DATA))
-    visualize(model)
+    visualize(model, io.StringIO())
 
 
 def test_classify_sql():
@@ -79,3 +81,17 @@ def test_parse_holding_lock_log_line():
             2857466,
         ),
     )
+
+def test_continuation_lines():
+    testdata = """\
+2022-05-22 10:50:29 CEST [2929626-2] log line one
+2022-05-22 10:50:29 CEST [2929626-2] log line two
+\tcontinuation data
+\tmore data
+2022-05-22 10:50:29 CEST [2929626-2] log line three
+"""
+    lines = list(parse_log_lines_automagically(io.StringIO(testdata)))
+    assert len(lines) == 3
+    assert lines[0].line == "2022-05-22 10:50:29 CEST [2929626-2] log line one"
+    assert lines[1].line == "2022-05-22 10:50:29 CEST [2929626-2] log line two\n\tcontinuation data\n\tmore data"
+    assert lines[2].line == "2022-05-22 10:50:29 CEST [2929626-2] log line three"
