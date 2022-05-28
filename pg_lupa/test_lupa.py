@@ -61,6 +61,20 @@ def test_parse_holding_lock_log_line():
     )
 
 
+def test_parse_log_prefix_default_style():
+    prefix = "2022-05-22 10:50:29.123 CEST [2929634] "
+    entry = parse_log_prefix(prefix)
+    assert entry.pid == 2929634
+    assert entry.log_line_no is None
+    assert entry.username is None
+    assert entry.database is None
+    assert entry.application_name is None
+    oslo = pytz.timezone("Europe/Oslo")
+    assert entry.timestamp == datetime.datetime(
+        2022, 5, 22, 10, 50, 29, 123000, tzinfo=oslo
+    )
+
+
 def test_parse_log_prefix_old_style():
     prefix = """2022-05-22 11:09:34 CEST [2949465-9] username@database """
     entry = parse_log_prefix(prefix)

@@ -54,6 +54,10 @@ NEW_STYLE_LOG_PREFIX_RE = re.compile(
     r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] ([A-Za-z0-9_-]+)@([A-Za-z0-9_-]+) [(]([^)]+)[)]$"
 )
 
+DEFAULT_LOG_PREFIX_RE = re.compile(
+    r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]+ [A-Za-z]+) \[([0-9]+)] *$"
+)
+
 DURATION_LINE_RE = re.compile(r"^([0-9]+[.][0-9]{3}) ms +statement:(.*)$")
 DURATION_LINE_WITHOUT_STATEMENT_RE = re.compile(r"^([0-9]+[.][0-9]{3}) ms$")
 
@@ -204,6 +208,16 @@ def hash_as_colour(s: str) -> str:
 
 def parse_log_prefix(prefix: str) -> LogPrefixInfo:
     prefix = prefix.strip()
+
+    m = DEFAULT_LOG_PREFIX_RE.match(prefix)
+    if m:
+        timestamp = m.group(1)
+        process_id = m.group(2)
+
+        return LogPrefixInfo(
+            timestamp=parse_date(timestamp),
+            pid=int(process_id),
+        )
 
     m = OLD_STYLE_LOG_PREFIX_RE.match(prefix)
     if m:
