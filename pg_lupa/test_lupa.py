@@ -1,6 +1,17 @@
 import io
+import pytz
+import datetime
 
-from .lupa import *
+from .lupa import (
+    parse_holding_lock_log_line,
+    split_simple_lines,
+    classify_sql,
+    parse_log_prefix,
+    visualize,
+    parse_postgres_lines,
+    parse_log_lines_automagically,
+    HoldingLockLogEntry,
+)
 
 TINY_LOG_DATA = """
 2022-05-22 10:50:29 CEST [2929634-1] [unknown]@[unknown] LOG:  connection received: host=1.2.3.4 port=37562
@@ -70,17 +81,6 @@ def test_classify_sql():
     assert classify_sql(one) == classify_sql(four)
     assert classify_sql(one) == classify_sql(two)
     assert classify_sql(one) != classify_sql(three)
-
-
-def test_parse_holding_lock_log_line():
-    entry = parse_holding_lock_log_line("2845932. Wait queue: 2864876, 2857466.")
-    assert entry == HoldingLockLogEntry(
-        holding_lock_pid=2845932,
-        wait_queue_pid=(
-            2864876,
-            2857466,
-        ),
-    )
 
 
 def test_continuation_lines():

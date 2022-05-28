@@ -5,7 +5,6 @@ import enum
 import json
 import random
 import re
-import sys
 import typing
 from typing import Iterator, Optional
 
@@ -23,11 +22,11 @@ def contrast_ratio_with_white(rgb) -> float:
     def f(x):
         return x / 3294 if x <= 10 else (x / 269 + 0.0513) ** 2.4
 
-    def l(r, g, b):
+    def relative_luminosity(r, g, b):
         return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
 
     r, g, b = rgb
-    return 1 / (l(r, g, b) + 0.05)
+    return 1 / (relative_luminosity(r, g, b) + 0.05)
 
 
 def sufficient_contrast_with_white(rgb) -> bool:
@@ -529,7 +528,6 @@ def visualize(model: Model, out: typing.TextIO):
         total_height=len(pids) * bar_height,
     )
 
-    process_items = []
     for pid, index in pids.items():
         rec.processes.append(
             ProcessVizData(
@@ -539,7 +537,6 @@ def visualize(model: Model, out: typing.TextIO):
             )
         )
 
-    event_items = []
     for i, evt in enumerate(model.events):
         rec.events.append(
             EventVizData(
@@ -558,7 +555,6 @@ def visualize(model: Model, out: typing.TextIO):
             )
         )
 
-    statement_items = []
     for i, stmt in enumerate(statements):
         name = f"stmt{i+1}"
         col = hash_as_colour(classify_sql(stmt.statement))
@@ -687,8 +683,6 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
     }
 
     for line in lines:
-        handled = False
-
         for key, func in dispatch.items():
             if key in line.line:
                 prefix, _, core = line.line.partition(key)
@@ -701,7 +695,6 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
                     pids.add(context.pid)
 
                 func(context, core)
-                handled = True
                 break
 
     processes = []
@@ -720,7 +713,7 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
 
 
 def merge_continuation_lines(lines: Iterator[LogLine]) -> Iterator[LogLine]:
-    last_line = None
+    last_line: Optional[LogLine] = None
 
     for line in lines:
         if not line.line.startswith("\t"):
@@ -728,6 +721,9 @@ def merge_continuation_lines(lines: Iterator[LogLine]) -> Iterator[LogLine]:
                 yield last_line
             last_line = line.copy()
             continue
+
+        if last_line is None:
+            raise RuntimeError("Continuation line without preceding line")
 
         last_line.line += "\n" + line.line
 
@@ -752,10 +748,3 @@ def parse_log_lines_automagically(f: typing.TextIO) -> Iterator[LogLine]:
 def parse_log_data_automagically(f: typing.TextIO) -> Model:
     lines = parse_log_lines_automagically(f)
     return parse_postgres_lines(list(lines))
-
-
-if __name__ == "__main__":
-    data = sys.stdin.read()
-    lines = ingest_logs_google_json(data)
-    model = parse_postgres_lines(lines)
-    visualize(model, out)

@@ -1,0 +1,25 @@
+repos:
+  - repo: local
+    hooks:
+    - id: black
+      name: black
+      entry: poetry run black
+      language: system
+      types: [python]
+      exclude: ^.*\b(migrations)\b.*$
+    - id: isort
+      name: isort
+      entry: poetry run isort
+      language: system
+      types: [python]
+    - id: flake8
+      name: flake8
+      entry: poetry run flake8
+      language: system
+      types: [python]
+    - id: mypy
+      name: mypy
+      entry: poetry run mypy --show-column-numbers --show-error-codes --hide-error-context --no-error-summary
+      language: system
+      types: [python]
+      verbose: true
