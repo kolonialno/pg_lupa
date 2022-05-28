@@ -75,6 +75,17 @@ def test_parse_log_prefix_default_style():
     )
 
 
+def test_parse_log_prefix_truncated_style():
+    prefix = """2022-05-22 11:09:34 CEST [2949465-9] """
+    entry = parse_log_prefix(prefix)
+    assert entry.pid == 2949465
+    assert entry.log_line_no == 9
+    assert entry.username is None
+    assert entry.database is None
+    oslo = pytz.timezone("Europe/Oslo")
+    assert entry.timestamp == datetime.datetime(2022, 5, 22, 11, 9, 34, tzinfo=oslo)
+
+
 def test_parse_log_prefix_old_style():
     prefix = """2022-05-22 11:09:34 CEST [2949465-9] username@database """
     entry = parse_log_prefix(prefix)
@@ -100,9 +111,9 @@ def test_parse_log_prefix_new_style():
 
 def test_parse_tiny_log():
     model = parse_postgres_lines(split_simple_lines(TINY_LOG_DATA))
-    assert len(model.events) == 6
+    assert len(model.events) == 7
     assert len(model.statements) == 1
-    assert len(model.processes) == 9
+    assert len(model.processes) == 10
 
 
 def test_visualize_tiny_log():

@@ -47,11 +47,11 @@ def parse_date(s: str) -> datetime.datetime:
 LOG_LINE_PREFIX = "%t [%p-%l] %q%u@%d"
 
 OLD_STYLE_LOG_PREFIX_RE = re.compile(
-    r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] ([A-Za-z0-9_-]+)@([A-Za-z0-9_-]+)$"
+    r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] *(?:([A-Za-z0-9_-]+)@([A-Za-z0-9_-]+))?$"
 )
 
 NEW_STYLE_LOG_PREFIX_RE = re.compile(
-    r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] ([A-Za-z0-9_-]+)@([A-Za-z0-9_-]+) [(]([^)]+)[)]$"
+    r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [A-Za-z]+) \[([0-9]+)-([0-9]+)\] *(?:([A-Za-z0-9_-]+)@([A-Za-z0-9_-]+) [(]([^)]+)[)])?$"
 )
 
 DEFAULT_LOG_PREFIX_RE = re.compile(
@@ -112,6 +112,8 @@ class EventType(str, enum.Enum):
     AUTHORIZED = "connection authorized"
     DEADLOCK = "deadlock"
     WAITING_FOR_LOCK = "waiting for lock"
+    ANALYZE = "analyze"
+    VACUUM = "vacuum"
 
 
 class Event(pydantic.BaseModel):
@@ -119,6 +121,7 @@ class Event(pydantic.BaseModel):
     pid: int
     context: LogPrefixInfo
     event_type: EventType
+    description: Optional[str] = None
     primary_related_pids: tuple[int, ...] = ()
     secondary_related_pids: tuple[int, ...] = ()
 
@@ -142,6 +145,8 @@ EVENT_COLOURS = {
     EventType.AUTHORIZED: "green",
     EventType.DEADLOCK: "red",
     EventType.WAITING_FOR_LOCK: "black",
+    EventType.ANALYZE: "blue",
+    EventType.VACUUM: "violet",
 }
 
 
@@ -503,6 +508,14 @@ def render_context_table(context: LogPrefixInfo) -> str:
 
 
 def render_event_mouseover_content(evt: Event) -> str:
+    desc = ""
+    if evt.description:
+        desc = f"""
+<p>
+  {evt.description}
+</p>
+"""
+
     return (
         render_context_table(evt.context)
         + f"""
@@ -514,6 +527,7 @@ def render_event_mouseover_content(evt: Event) -> str:
   <b>Event</b>: {evt.event_type}
 </p>
 """.strip()
+        + desc
     )
 
 
@@ -688,6 +702,28 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
 
         stmts_by_process[stmt.pid].append(stmt)
 
+    def handle_automatic_analyze(context, core):
+        events.append(
+            Event(
+                time=context.timestamp,
+                pid=context.pid,
+                context=context,
+                event_type=EventType.ANALYZE,
+                description=core.strip(),
+            )
+        )
+
+    def handle_automatic_vacuum(context, core):
+        events.append(
+            Event(
+                time=context.timestamp,
+                pid=context.pid,
+                context=context,
+                event_type=EventType.VACUUM,
+                description=core.strip(),
+            )
+        )
+
     def handle_disconnection(context, core):
         events.append(
             Event(
@@ -746,6 +782,8 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
         "LOG:  connection authorized: ": handle_connection_authorized,
         "DETAIL:  Process holding the lock: ": handle_process_holding_lock,
         "ERROR:  deadlock detected": handle_deadlock_detected,
+        "LOG:  automatic analyze of ": handle_automatic_analyze,
+        "LOG:  automatic vacuum of ": handle_automatic_vacuum,
     }
 
     def try_parse(line: LogLine):
