@@ -61,7 +61,7 @@ The generated visualization is a HTML file which can be opened in a browser.
 
 The X-axis is time.
 
-The Y-axis is Postgres processes (sorted by PID in ascending order from the top).
+The Y-axis is Postgres processes.
 
 Rectangles represent events that covered spans of time on the database. Chiefly,
 this means slow SQL statements. (Note that which statements are included here

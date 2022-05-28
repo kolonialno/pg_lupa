@@ -125,6 +125,16 @@ class Event(pydantic.BaseModel):
 
 class Process(pydantic.BaseModel):
     pid: int
+    first_appearance: datetime.datetime
+
+
+class ProcessSortOrder(str, enum.Enum):
+    PID = "pid"
+    TIME = "time"
+
+
+class VizOptions(pydantic.BaseModel):
+    process_sort_order: ProcessSortOrder = ProcessSortOrder.TIME
 
 
 EVENT_COLOURS = {
@@ -535,9 +545,20 @@ def render_statement_mouseover_content(stmt: Statement) -> str:
     )
 
 
-def visualize(model: Model, out: typing.TextIO):
+def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = None):
+    options = options or VizOptions()
+
     statements = list(model.statements)
-    pids = {process.pid: i for i, process in enumerate(model.processes)}
+
+    processes = list(model.processes)
+    processes.sort(
+        key={
+            ProcessSortOrder.PID: lambda p: p.pid,
+            ProcessSortOrder.TIME: lambda p: (p.first_appearance, p.pid),
+        }[options.process_sort_order]
+    )
+
+    pids = {process.pid: i for i, process in enumerate(processes)}
 
     statements.sort(key=lambda x: x.start_time)
 
@@ -644,7 +665,16 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
     stmts_by_process = collections.defaultdict(list)
     events = []
 
-    pids = set()
+    pids_by_first_seen: dict[int, datetime.datetime] = {}
+
+    def saw_pid_at(pid: int, t: datetime.datetime):
+        try:
+            old_time = pids_by_first_seen[pid]
+        except KeyError:
+            pids_by_first_seen[pid] = t
+        else:
+            if old_time > t:
+                pids_by_first_seen[pid] = t
 
     def handle_duration(context, core):
         parsed = parse_duration_log_line(core)
@@ -653,6 +683,8 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
 
         stmt = create_statement(context, parsed)
         assert stmt.pid
+
+        saw_pid_at(stmt.pid, stmt.start_time)
 
         stmts_by_process[stmt.pid].append(stmt)
 
@@ -679,9 +711,9 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
     def handle_process_holding_lock(context, core):
         entry = parse_holding_lock_log_line(core)
 
-        pids.add(entry.holding_lock_pid)
+        saw_pid_at(entry.holding_lock_pid, context.timestamp)
         for pid in entry.wait_queue_pid:
-            pids.add(pid)
+            saw_pid_at(pid, context.timestamp)
 
         wait_queue_except_self = tuple(
             x for x in entry.wait_queue_pid if x != context.pid
@@ -725,8 +757,7 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
                 if line.timestamp:
                     context.timestamp = line.timestamp
 
-                if context.pid:
-                    pids.add(context.pid)
+                saw_pid_at(context.pid, context.timestamp)
 
                 func(context, core)
                 break
@@ -740,10 +771,11 @@ def parse_postgres_lines(lines: list[LogLine]) -> Model:
             ) from e
 
     processes = []
-    for pid in sorted(pids):
+    for pid in pids_by_first_seen:
         processes.append(
             Process(
                 pid=pid,
+                first_appearance=pids_by_first_seen[pid],
             )
         )
 
