@@ -10,6 +10,7 @@ import typing
 from typing import Callable, Iterator, Optional
 
 import dateutil.parser
+import jinja2
 import pkg_resources
 import pydantic
 import pytz
@@ -621,20 +622,21 @@ def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = 
 
 
 def render_html(data: VizData) -> str:
-    css_data = pkg_resources.resource_string(
-        "pg_lupa.resources", "lupa.embed.css"
-    ).decode()
-    js_data = pkg_resources.resource_string(
-        "pg_lupa.resources", "lupa.embed.js"
-    ).decode()
-    raw_template_string = pkg_resources.resource_string(
-        "pg_lupa.resources", "lupa.template.html"
-    ).decode()
-    template_string = raw_template_string.replace("%CSS_DATA%", css_data).replace(
-        "%JAVASCRIPT_DATA%", js_data
+    env = jinja2.Environment(
+        loader=jinja2.FunctionLoader(
+            lambda name: pkg_resources.resource_string(
+                "pg_lupa.resources", name
+            ).decode()
+        ),
+        autoescape=True,
     )
-    rendered_json = data.json(indent=2)
-    return template_string.replace("%JSON_DATA%", rendered_json)
+
+    tmpl = env.get_template("lupa.template.html")
+
+    return tmpl.render(
+        title="Lupa report",
+        data=data.json(indent=2),
+    )
 
 
 def ingest_logs_google_json(records):
