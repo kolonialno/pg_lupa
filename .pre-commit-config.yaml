@@ -22,9 +22,7 @@ repos:
         language: system
         types: [python]
         verbose: true
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: "5e374fda194d7f7ce9eebbd582b2a5594838c85b"
+    hooks:
       - id: prettier
-        name: prettier
-        entry: npx prettier --check
-        language: system
-        types: [html, css, javascript, yaml]
-        verbose: true
