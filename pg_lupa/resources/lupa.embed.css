@@ -1,0 +1,48 @@
+div.tooltip {
+  position: absolute;
+  text-align: left;
+  padding: 0.5rem;
+  background: #ffffff;
+  color: #313639;
+  border: 1px solid #313639;
+  border-radius: 4px;
+  pointer-events: none;
+  font-size: 1.3rem;
+}
+
+#context-info {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 30vw;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+#timeline {
+  position: fixed;
+  top: 0;
+  left: 30vw;
+  width: 70vw;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.pg_process {
+  display: none;
+}
+
+.process-primary-highlight {
+  display: inline-block;
+  fill: rgb(240, 180, 180);
+}
+
+.process-secondary-highlight {
+  display: inline-block;
+  fill: rgb(200, 200, 200);
+}
+
+.context-highlight {
+  stroke: rgb(255, 200, 200);
+  stroke-width: 3px;
+}

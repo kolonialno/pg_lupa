@@ -10,6 +10,7 @@ import typing
 from typing import Callable, Iterator, Optional
 
 import dateutil.parser
+import pkg_resources
 import pydantic
 import pytz
 
@@ -460,180 +461,6 @@ def create_statement(context: LogPrefixInfo, entry: DurationLogEntry) -> Stateme
     )
 
 
-template = """
-<html>
-<head>
-<style>
-
-div.tooltip {
-     position: absolute;
-     text-align: left;
-     padding: .5rem;
-     background: #FFFFFF;
-     color: #313639;
-     border: 1px solid #313639;
-     border-radius: 4px;
-     pointer-events: none;
-     font-size: 1.3rem;
-}
-
-#context-info {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 30vw;
-    height: 100vh;
-    overflow-y: auto;
-}
-
-#timeline {
-    position: fixed;
-    top: 0;
-    left: 30vw;
-    width: 70vw;
-    height: 100vh;
-    overflow-y: auto;
-}
-
-.pg_process {
-    display: none;
-}
-
-.process-primary-highlight {
-    display: inline-block;
-    fill: rgb(240,180,180);
-}
-
-.process-secondary-highlight {
-    display: inline-block;
-    fill: rgb(200,200,200);
-}
-
-.context-highlight {
-    stroke: rgb(255, 200, 200);
-    stroke-width: 3px;
-}
-
-</style>
-</head>
-<body>
-  <div id="context-info"></div>
-  <div id="timeline"></div>
-</body>
-
-<script id="data" type="application/json">
-%JSON_DATA%
-</script>
-
-<script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
-<script>
-
-let contentLockedToID = null;
-
-function setContent(id, content, lock, processes1, processes2) {
-  if (contentLockedToID && !lock) return;
-
-  const alreadyLockedToThis = contentLockedToID && contentLockedToID === id;
-  if (alreadyLockedToThis) {
-    $("#context-info").html("");
-    $(".context-highlight").removeClass("context-highlight");
-    $(".process-highlight").removeClass("process-primary-highlight process-secondary-highlight");
-    contentLockedToID = null;
-    return;
-  }
-
-  $("#context-info").html(content);
-  contentLockedToID = lock ? id : null;
-
-  $(".context-highlight").removeClass("context-highlight");
-  $("#" + id).addClass("context-highlight");
-
-  $(".process-highlight").removeClass("process-primary-highlight process-secondary-highlight");
-  if (processes1) {
-      processes1.forEach(procid => {
-        $(document.getElementById(procid)).addClass("process-highlight process-primary-highlight");
-      });
-  }
-  if (processes2) {
-    processes2.forEach(procid => {
-      $(document.getElementById(procid)).addClass("process-highlight process-secondary-highlight");
-    });
-  }
-}
-
-function draw() {
-  const width = $("#timeline").width() - 20;
-  const data = JSON.parse(document.getElementById("data").textContent);
-
-  const div = d3.select("body").append("div")
-     .attr("class", "tooltip")
-     .style("opacity", 0);
-
-  const svg = d3.select("#timeline")
-    .append("svg")
-        .attr("width", width)
-        .attr("height", data.total_height);
-
-  svg.selectAll().data(data.processes)
-    .enter().append("rect")
-      .attr("id", function(d) { return d.id; })
-      .attr("x", 0 )
-      .attr("width", width )
-      .attr("y", function(d) { return d.y; })
-      .attr("height", function(d) { return d.height; })
-      .attr("class", "pg_process")
-      ;
-
-  svg.selectAll().data(data.statements)
-    .enter().append("rect")
-      .attr("id", function(d) { return d.id; })
-      .attr("class", "pg_stmt")
-      .attr("x", function(d) { return d.t_offset / data.total_duration * width; })
-      .attr("y", function(d) { return d.y; })
-      .attr("width", function(d) { return d.duration / data.total_duration * width; })
-      .attr("height", function(d) { return d.height; })
-      .style("fill", function(d) { return d.colour; })
-      .on("click", function(evt, d) {
-        setContent(d.id, d.mouseover_content, true);
-      })
-      .on("mouseover", function(evt, d) {
-        setContent(d.id, d.mouseover_content, false);
-      })
-      .on("mouseout", function(d) {
-        setContent(null, "", false);
-      })
-      ;
-
-  svg.selectAll().data(data.events)
-    .enter().append("circle")
-      .attr("id", function(d) { return d.id; })
-      .attr("cx", function(d) {
-        return d.t_offset / data.total_duration * width;
-      })
-      .attr("fill", function(d) { return d.colour; })
-      .attr("cy", function(d) { return d.cy; })
-      .attr("r", function(d) { return d.size; })
-      .attr("class", "pg_event")
-      .on("click", function(evt, d) {
-        setContent(d.id, d.mouseover_content, true, d.primary_related_process_ids, d.secondary_related_process_ids);
-      })
-      .on("mouseover", function(evt, d) {
-        setContent(d.id, d.mouseover_content, false, d.primary_related_process_ids, d.secondary_related_process_ids);
-      })
-      .on("mouseout", function(d) {
-        setContent(null, "", false);
-      })
-      ;
-
-}
-
-draw();
-
-</script>
-"""
-
-
 def render_context_table(context: LogPrefixInfo) -> str:
     comp = []
 
@@ -790,9 +617,24 @@ def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = 
             )
         )
 
-    json_data = rec.json(indent=2)
-    rendered = template.replace("%JSON_DATA%", json_data)
-    print(rendered, file=out)
+    out.write(render_html(rec))
+
+
+def render_html(data: VizData) -> str:
+    css_data = pkg_resources.resource_string(
+        "pg_lupa.resources", "lupa.embed.css"
+    ).decode()
+    js_data = pkg_resources.resource_string(
+        "pg_lupa.resources", "lupa.embed.js"
+    ).decode()
+    raw_template_string = pkg_resources.resource_string(
+        "pg_lupa.resources", "lupa.template.html"
+    ).decode()
+    template_string = raw_template_string.replace("%CSS_DATA%", css_data).replace(
+        "%JAVASCRIPT_DATA%", js_data
+    )
+    rendered_json = data.json(indent=2)
+    return template_string.replace("%JSON_DATA%", rendered_json)
 
 
 def ingest_logs_google_json(records):
