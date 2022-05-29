@@ -13,20 +13,43 @@ import dateutil.parser
 import jinja2
 import pkg_resources
 import pydantic
-import pytz
-
-TZMAPPING = {
-    "CET": pytz.timezone("Europe/Oslo"),
-    "CEST": pytz.timezone("Europe/Oslo"),
-}
-
-
-def format_datetime(t: datetime.datetime) -> str:
-    return t.isoformat()
 
 
 def format_duration(d: datetime.timedelta) -> str:
-    return str(d)
+    remaining = d.total_seconds()
+
+    days = int(remaining // 86400)
+    remaining -= days * 86400
+
+    hours = int(remaining // 3600)
+    remaining -= hours * 3600
+
+    minutes = int(remaining // 60)
+    remaining -= minutes * 60
+
+    seconds = remaining
+
+    comp = []
+
+    if days:
+        comp.append(f"{days}d")
+
+    if hours:
+        comp.append(f"{hours}h")
+
+    if minutes:
+        comp.append(f"{minutes}m")
+
+    if seconds:
+        if int(seconds) == seconds:
+            comp.append(f"{int(seconds)}s")
+        else:
+            comp.append(f"{seconds:.03f}s")
+
+    duration_string = "".join(comp)
+    total_millis = int(d.total_seconds() * 1000)
+
+    return f"{duration_string} ({total_millis}ms)"
 
 
 def contrast_ratio_with_white(rgb) -> float:
@@ -44,8 +67,14 @@ def sufficient_contrast_with_white(rgb) -> bool:
     return contrast_ratio_with_white(rgb) > 1.5
 
 
-def parse_date(s: str) -> datetime.datetime:
-    return dateutil.parser.parse(s, tzinfos=TZMAPPING)
+def parse_timestamp(s: str) -> datetime.datetime:
+    if s.endswith(" CEST"):
+        s = s.replace(" CEST", "+02:00")
+
+    if s.endswith(" CET"):
+        s = s.replace(" CET", "+01:00")
+
+    return dateutil.parser.parse(s)
 
 
 DURATION_LINE_RE = re.compile(r"^([0-9]+[.][0-9]{3}) ms +statement:(.*)$")
@@ -185,7 +214,7 @@ def _make_prefix_parser_from_regex(
     active_handlers: dict[str, Callable[[str, LogPrefixInfo], None]] = {}
 
     def handle_timestamp(value: str, info: LogPrefixInfo) -> None:
-        info.timestamp = parse_date(value)
+        info.timestamp = parse_timestamp(value)
 
     def handle_pid(value: str, info: LogPrefixInfo) -> None:
         info.pid = int(value)
@@ -323,6 +352,7 @@ class ProcessSortOrder(str, enum.Enum):
 
 class VizOptions(pydantic.BaseModel):
     process_sort_order: ProcessSortOrder = ProcessSortOrder.TIME
+    timezone: Optional[str] = None
 
 
 class ParseOptions(pydantic.BaseModel):
@@ -509,7 +539,8 @@ def make_data_table(
         text=text or None,
     )
 
-    assert table.rows
+    assert table.rows is not None
+
     if context.pid:
         table.rows.append(
             DataRow(
@@ -557,6 +588,18 @@ def make_data_table(
 
 def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = None):
     options = options or VizOptions()
+
+    tz = None
+
+    if options.timezone:
+        tz = dateutil.tz.gettz(options.timezone)
+
+    timestamp_format = "%Y-%m-%d %H:%M:%S.%f %Z"
+
+    def format_datetime(t: datetime.datetime) -> str:
+        if tz:
+            t = t.astimezone(tz)
+        return t.strftime(timestamp_format)
 
     render_data_table = make_data_table_renderer()
 
@@ -701,7 +744,7 @@ def ingest_logs_google_json(records):
     for record in records:
         line = record["textPayload"]
 
-        timestamp = parse_date(record["timestamp"])
+        timestamp = parse_timestamp(record["timestamp"])
 
         if carriage_return in line:
             line = line[line.index(carriage_return) + 1 :]

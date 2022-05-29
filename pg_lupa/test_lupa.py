@@ -3,8 +3,8 @@ import io
 import os
 from pathlib import Path
 
+import dateutil.tz
 import pytest
-import pytz
 
 from .lupa import (
     HoldingLockLogEntry,
@@ -78,7 +78,7 @@ def test_parse_log_prefix_default_style():
     assert entry.username is None
     assert entry.database is None
     assert entry.application_name is None
-    oslo = pytz.timezone("Europe/Oslo")
+    oslo = dateutil.tz.gettz("Europe/Oslo")
     assert entry.timestamp == datetime.datetime(
         2022, 5, 22, 10, 50, 29, 123000, tzinfo=oslo
     )
@@ -91,7 +91,7 @@ def test_parse_log_prefix_truncated_style():
     assert entry.log_line_no == 9
     assert entry.username is None
     assert entry.database is None
-    oslo = pytz.timezone("Europe/Oslo")
+    oslo = dateutil.tz.gettz("Europe/Oslo")
     assert entry.timestamp == datetime.datetime(2022, 5, 22, 11, 9, 34, tzinfo=oslo)
 
 
@@ -102,7 +102,7 @@ def test_parse_log_prefix_old_style():
     assert entry.log_line_no == 9
     assert entry.username == "username"
     assert entry.database == "database"
-    oslo = pytz.timezone("Europe/Oslo")
+    oslo = dateutil.tz.gettz("Europe/Oslo")
     assert entry.timestamp == datetime.datetime(2022, 5, 22, 11, 9, 34, tzinfo=oslo)
 
 
@@ -114,7 +114,7 @@ def test_parse_log_prefix_new_style():
     assert entry.username == "username"
     assert entry.database == "database"
     assert entry.application_name == "foo@bar-quux-default-123456-abc78"
-    oslo = pytz.timezone("Europe/Oslo")
+    oslo = dateutil.tz.gettz("Europe/Oslo")
     assert entry.timestamp == datetime.datetime(2022, 5, 22, 11, 9, 34, tzinfo=oslo)
 
 

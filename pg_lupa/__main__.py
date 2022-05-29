@@ -8,6 +8,7 @@ from . import lupa
 @click.command()
 @click.option("--input-logs", type=click.File("r"))
 @click.option("--output-html", type=click.File("w"))
+@click.option("--timezone", default=None)
 @click.option("--sort-processes-by", default="time")
 @click.option("--log-line-prefix-format", default=None, type=str)
 @click.option("--log-line-prefix-regex", default=None, type=str)
@@ -17,9 +18,11 @@ def main(
     sort_processes_by,
     log_line_prefix_format,
     log_line_prefix_regex,
+    timezone,
 ):
     viz_options = lupa.VizOptions(
         process_sort_order=lupa.ProcessSortOrder(sort_processes_by),
+        timezone=timezone,
     )
     parse_options = lupa.ParseOptions(
         log_line_prefix_format=log_line_prefix_format,
