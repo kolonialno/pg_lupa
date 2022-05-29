@@ -21,6 +21,14 @@ TZMAPPING = {
 }
 
 
+def format_datetime(t: datetime.datetime) -> str:
+    return t.isoformat()
+
+
+def format_duration(d: datetime.timedelta) -> str:
+    return str(d)
+
+
 def contrast_ratio_with_white(rgb) -> float:
     def f(x):
         return x / 3294 if x <= 10 else (x / 269 + 0.0513) ** 2.4
@@ -56,6 +64,16 @@ class LogPrefixInfo(pydantic.BaseModel):
     username: Optional[str] = None
     database: Optional[str] = None
     application_name: Optional[str] = None
+
+
+class DataRow(pydantic.BaseModel):
+    label: str
+    value: str
+
+
+class DataTable(pydantic.BaseModel):
+    rows: Optional[list[DataRow]] = None
+    text: Optional[str] = None
 
 
 def _make_prefix_regex(
@@ -462,81 +480,85 @@ def create_statement(context: LogPrefixInfo, entry: DurationLogEntry) -> Stateme
     )
 
 
-def render_context_table(context: LogPrefixInfo) -> str:
-    comp = []
+def make_data_table_renderer() -> Callable[[DataTable], str]:
+    env = jinja2.Environment(
+        loader=jinja2.FunctionLoader(
+            lambda name: pkg_resources.resource_string(
+                "pg_lupa.resources", name
+            ).decode()
+        ),
+        autoescape=True,
+    )
 
+    tmpl = env.get_template("context.template.html")
+
+    def render_data_table(table: DataTable) -> str:
+        return tmpl.render(table=table)
+
+    return render_data_table
+
+
+def make_data_table(
+    context: LogPrefixInfo,
+    *,
+    rows: Optional[list[DataRow]] = None,
+    text: Optional[str] = None,
+) -> DataTable:
+    table = DataTable(
+        rows=[],
+        text=text or None,
+    )
+
+    assert table.rows
     if context.pid:
-        comp.append(f"<p><b>PID</b>: {context.pid}</p>")
+        table.rows.append(
+            DataRow(
+                label="PID",
+                value=str(context.pid),
+            )
+        )
 
     if context.log_line_no:
-        comp.append(f"<p><b>Log line no.</b>: {context.log_line_no}</p>")
+        table.rows.append(
+            DataRow(
+                label="Log line no.",
+                value=str(context.log_line_no),
+            )
+        )
 
     if context.username:
-        comp.append(f"<p><b>Username</b>: {context.username}</p>")
+        table.rows.append(
+            DataRow(
+                label="Username",
+                value=str(context.username),
+            )
+        )
 
     if context.database:
-        comp.append(f"<p><b>Database</b>: {context.database}</p>")
+        table.rows.append(
+            DataRow(
+                label="Database",
+                value=str(context.database),
+            )
+        )
 
     if context.application_name:
-        comp.append(f"<p><b>Application</b>: {context.application_name}</p>")
+        table.rows.append(
+            DataRow(
+                label="Application",
+                value=str(context.application_name),
+            )
+        )
 
-    return "\n".join(comp)
+    table.rows.extend(rows or [])
 
-
-def render_event_mouseover_content(evt: Event) -> str:
-    desc = ""
-    if evt.description:
-        desc = f"""
-<p>
-  {evt.description}
-</p>
-"""
-
-    return (
-        render_context_table(evt.context)
-        + f"""
-<p>
-  <b>Time</b>: {evt.time.isoformat()}
-</p>
-
-<p>
-  <b>Event</b>: {evt.event_type}
-</p>
-""".strip()
-        + desc
-    )
-
-
-def render_statement_mouseover_content(stmt: Statement) -> str:
-    t0 = stmt.start_time
-    t1 = stmt.end_time
-
-    duration = stmt.end_time - stmt.start_time
-
-    return (
-        render_context_table(stmt.context)
-        + f"""
-<p>
-  <b>Start</b>: {t0.isoformat()}
-</p>
-
-<p>
-  <b>End</b>: {t1.isoformat()}
-</p>
-
-<p>
-  <b>Duration</b>: {duration}
-</p>
-
-<p>
-  {stmt.statement}
-</p>
-""".strip()
-    )
+    return table
 
 
 def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = None):
     options = options or VizOptions()
+
+    render_data_table = make_data_table_renderer()
 
     statements = list(model.statements)
 
@@ -581,7 +603,22 @@ def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = 
                 t_offset=evt.time.timestamp() - min_time,
                 cy=pids[evt.pid] * bar_height + 0.5 * bar_height,
                 size=0.4 * bar_height,
-                mouseover_content=render_event_mouseover_content(evt),
+                mouseover_content=render_data_table(
+                    make_data_table(
+                        evt.context,
+                        text=evt.description,
+                        rows=[
+                            DataRow(
+                                label="Time",
+                                value=format_datetime(evt.time),
+                            ),
+                            DataRow(
+                                label="Event",
+                                value=evt.event_type.value,
+                            ),
+                        ],
+                    )
+                ),
                 colour=EVENT_COLOURS[evt.event_type],
                 primary_related_process_ids=[
                     f"process_{pid}" for pid in evt.primary_related_pids
@@ -614,7 +651,26 @@ def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = 
                 duration=t1 - t0,
                 colour=col,
                 process_element_id=f"process_{stmt.pid}",
-                mouseover_content=render_statement_mouseover_content(stmt),
+                mouseover_content=render_data_table(
+                    make_data_table(
+                        stmt.context,
+                        text=stmt.statement,
+                        rows=[
+                            DataRow(
+                                label="Start",
+                                value=format_datetime(stmt.start_time),
+                            ),
+                            DataRow(
+                                label="End",
+                                value=format_datetime(stmt.end_time),
+                            ),
+                            DataRow(
+                                label="Duration",
+                                value=format_duration(stmt.end_time - stmt.start_time),
+                            ),
+                        ],
+                    )
+                ),
             )
         )
 
