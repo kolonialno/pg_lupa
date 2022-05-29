@@ -10,9 +10,12 @@ import typing
 from typing import Callable, Iterator, Optional
 
 import dateutil.parser
+import dateutil.tz
 import jinja2
 import pkg_resources
 import pydantic
+
+__version__ = "0.0.1"
 
 
 def format_duration(d: datetime.timedelta) -> str:
@@ -408,8 +411,11 @@ class VizData(pydantic.BaseModel):
     events: list[EventVizData]
     processes: list[ProcessVizData]
     statements: list[StatementVizData]
-    total_duration: float
+    total_duration_seconds: float
     total_height: int
+    total_duration_string: str
+    start_time_string: str
+    end_time_string: str
 
 
 def classify_sql(sql: str) -> str:
@@ -589,10 +595,7 @@ def make_data_table(
 def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = None):
     options = options or VizOptions()
 
-    tz = None
-
-    if options.timezone:
-        tz = dateutil.tz.gettz(options.timezone)
+    tz = dateutil.tz.gettz(options.timezone) if options.timezone else None
 
     timestamp_format = "%Y-%m-%d %H:%M:%S.%f %Z"
 
@@ -617,8 +620,11 @@ def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = 
 
     statements.sort(key=lambda x: x.start_time)
 
-    min_time = min(x.start_time for x in statements).timestamp()
-    max_time = max(x.end_time for x in statements).timestamp()
+    min_time_dt = min(x.start_time for x in statements)
+    max_time_dt = max(x.end_time for x in statements)
+
+    min_time = min_time_dt.timestamp()
+    max_time = max_time_dt.timestamp()
 
     bar_height = 10
 
@@ -626,7 +632,10 @@ def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = 
         statements=[],
         processes=[],
         events=[],
-        total_duration=max_time - min_time,
+        total_duration_seconds=max_time - min_time,
+        total_duration_string=format_duration(max_time_dt - min_time_dt),
+        start_time_string=format_datetime(min_time_dt),
+        end_time_string=format_datetime(min_time_dt),
         total_height=len(pids) * bar_height,
     )
 
@@ -733,8 +742,9 @@ def render_html(data: VizData) -> str:
     tmpl = env.get_template("lupa.template.html")
 
     return tmpl.render(
-        title="Lupa report",
-        data=data.json(indent=2),
+        embeddable_data=data.json(indent=2),
+        lupa_version=__version__,
+        report=data,
     )
 
 

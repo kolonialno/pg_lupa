@@ -1,16 +1,22 @@
+const unfocusedContent = $("#context-info").html();
 let contentLockedToID = null;
+
+function unfocus() {
+  $("#context-info").html(unfocusedContent);
+  $(".context-highlight").removeClass("context-highlight");
+  $(".process-highlight").removeClass(
+    "process-primary-highlight process-secondary-highlight"
+  );
+  contentLockedToID = null;
+}
 
 function setContent(id, content, lock, processes1, processes2) {
   if (contentLockedToID && !lock) return;
 
   const alreadyLockedToThis = contentLockedToID && contentLockedToID === id;
-  if (alreadyLockedToThis) {
-    $("#context-info").html("");
-    $(".context-highlight").removeClass("context-highlight");
-    $(".process-highlight").removeClass(
-      "process-primary-highlight process-secondary-highlight"
-    );
-    contentLockedToID = null;
+
+  if (alreadyLockedToThis || !id) {
+    unfocus();
     return;
   }
 
@@ -83,13 +89,13 @@ function draw() {
     })
     .attr("class", "pg_stmt")
     .attr("x", function (d) {
-      return (d.t_offset / data.total_duration) * width;
+      return (d.t_offset / data.total_duration_seconds) * width;
     })
     .attr("y", function (d) {
       return d.y;
     })
     .attr("width", function (d) {
-      return (d.duration / data.total_duration) * width;
+      return (d.duration / data.total_duration_seconds) * width;
     })
     .attr("height", function (d) {
       return d.height;
@@ -116,7 +122,7 @@ function draw() {
       return d.id;
     })
     .attr("cx", function (d) {
-      return (d.t_offset / data.total_duration) * width;
+      return (d.t_offset / data.total_duration_seconds) * width;
     })
     .attr("fill", function (d) {
       return d.colour;

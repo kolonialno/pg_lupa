@@ -68,3 +68,26 @@ td.context-value {
 hr.context {
   border: 1px solid #ffebcc;
 }
+
+.helptext-container {
+  text-align: center;
+}
+
+div.helptext {
+  display: inline-block;
+  text-align: center;
+  width: 80%;
+  color: #888;
+}
+
+p.blurb {
+  text-align: center;
+  color: #ffaa1e;
+}
+
+.blurb a:link,
+.blurb a:visited,
+.blurb a:hover,
+.blurb a:active {
+  color: #ffaa1e;
+}

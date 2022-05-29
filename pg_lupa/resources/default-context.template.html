@@ -1,0 +1,57 @@
+<p class="blurb">
+  🔍 <a href="https://github.com/kolonialno/pg_lupa">pg_lupa</a> v{{
+  lupa_version }}
+</p>
+
+<div class="helptext-container">
+  <div class="helptext">
+    The x-axis is time, y-axis is processes. Hover over elements in the chart to
+    see detailed information and highlight blocking processes.
+  </div>
+</div>
+
+<hr class="context" />
+
+<table class="context">
+  <tr class="context">
+    <td class="context-label">Start time</td>
+    <td class="context-value">
+      {{ report.start_time_string }}
+
+      <tr class="context">
+        <td class="context-label">End time</td>
+        <td class="context-value">
+          {{ report.end_time_string }}
+
+          <tr class="context">
+            <td class="context-label">Duration</td>
+            <td class="context-value">
+              {{ report.total_duration_string }}
+
+              <tr class="context">
+                <td class="context-label">Processes</td>
+                <td class="context-value">
+                  {{ report.processes | length }}
+
+                  <tr class="context">
+                    <td class="context-label">Statements</td>
+                    <td class="context-value">
+                      {{ report.statements | length }}
+
+                      <tr class="context">
+                        <td class="context-label">Events</td>
+                        <td class="context-value">
+                          {{ report.events | length }}
+                        </td>
+                      </tr>
+                    </td>
+                  </tr>
+                </td>
+              </tr>
+            </td>
+          </tr>
+        </td>
+      </tr>
+    </td>
+  </tr>
+</table>

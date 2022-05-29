@@ -6,12 +6,12 @@
     </style>
   </head>
   <body>
-    <div id="context-info"></div>
+    <div id="context-info">{% include "default-context.template.html" %}</div>
     <div id="timeline"></div>
   </body>
 
   <script id="data" type="application/json">
-    {{ data | safe }}
+    {{ embeddable_data | safe }}
   </script>
 
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js"></script>
