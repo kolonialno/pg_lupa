@@ -1,0 +1,14 @@
+{% if table.rows %}
+<table class="context">
+  {% for row in table.rows %}
+  <tr class="context">
+    <td class="context-label">{{ row.label }}</td>
+    <td class="context-value">{{ row.value }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %} {% if table.rows and table.text %}
+<hr class="context" />
+{% endif %} {% if table.text %}
+<p class="context-extended-text">{{ table.text }}</p>
+{% endif %}

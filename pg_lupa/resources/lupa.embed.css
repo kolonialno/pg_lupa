@@ -17,6 +17,7 @@ div.tooltip {
   width: 30vw;
   height: 100vh;
   overflow-y: auto;
+  background-color: #fff5e5;
 }
 
 #timeline {
@@ -45,4 +46,25 @@ div.tooltip {
 .context-highlight {
   stroke: rgb(255, 200, 200);
   stroke-width: 3px;
+}
+
+table.context {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+tr.context:nth-child(even) {
+  background-color: #ffebcc;
+}
+
+td.context-label {
+  color: #888;
+}
+
+td.context-value {
+  color: black;
+}
+
+hr.context {
+  border: 1px solid #ffebcc;
 }
