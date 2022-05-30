@@ -410,6 +410,7 @@ class EventVizData(pydantic.BaseModel):
 
 
 class VizData(pydantic.BaseModel):
+    title: str
     events: list[EventVizData]
     processes: list[ProcessVizData]
     statements: list[StatementVizData]
@@ -631,6 +632,7 @@ def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = 
     bar_height = 10
 
     rec = VizData(
+        title=f"{format_datetime(min_time_dt)} to {format_datetime(max_time_dt)}",
         statements=[],
         processes=[],
         events=[],
