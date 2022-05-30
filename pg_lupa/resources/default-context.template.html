@@ -15,43 +15,31 @@
 <table class="context">
   <tr class="context">
     <td class="context-label">Start time</td>
-    <td class="context-value">
-      {{ report.start_time_string }}
+    <td class="context-value">{{ report.start_time_string }}</td>
+  </tr>
 
-      <tr class="context">
-        <td class="context-label">End time</td>
-        <td class="context-value">
-          {{ report.end_time_string }}
+  <tr class="context">
+    <td class="context-label">End time</td>
+    <td class="context-value">{{ report.end_time_string }}</td>
+  </tr>
 
-          <tr class="context">
-            <td class="context-label">Duration</td>
-            <td class="context-value">
-              {{ report.total_duration_string }}
+  <tr class="context">
+    <td class="context-label">Duration</td>
+    <td class="context-value">{{ report.total_duration_string }}</td>
+  </tr>
 
-              <tr class="context">
-                <td class="context-label">Processes</td>
-                <td class="context-value">
-                  {{ report.processes | length }}
+  <tr class="context">
+    <td class="context-label">Processes</td>
+    <td class="context-value">{{ report.processes | length }}</td>
+  </tr>
 
-                  <tr class="context">
-                    <td class="context-label">Statements</td>
-                    <td class="context-value">
-                      {{ report.statements | length }}
+  <tr class="context">
+    <td class="context-label">Statements</td>
+    <td class="context-value">{{ report.statements | length }}</td>
+  </tr>
 
-                      <tr class="context">
-                        <td class="context-label">Events</td>
-                        <td class="context-value">
-                          {{ report.events | length }}
-                        </td>
-                      </tr>
-                    </td>
-                  </tr>
-                </td>
-              </tr>
-            </td>
-          </tr>
-        </td>
-      </tr>
-    </td>
+  <tr class="context">
+    <td class="context-label">Events</td>
+    <td class="context-value">{{ report.events | length }}</td>
   </tr>
 </table>

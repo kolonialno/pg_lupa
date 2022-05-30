@@ -377,6 +377,8 @@ class Model(pydantic.BaseModel):
     processes: list[Process]
     statements: list[Statement]
     events: list[Event]
+    start_time: datetime.datetime
+    end_time: datetime.datetime
 
 
 class ProcessVizData(pydantic.BaseModel):
@@ -620,8 +622,8 @@ def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = 
 
     statements.sort(key=lambda x: x.start_time)
 
-    min_time_dt = min(x.start_time for x in statements)
-    max_time_dt = max(x.end_time for x in statements)
+    min_time_dt = min(min(x.start_time for x in statements), model.start_time)
+    max_time_dt = model.end_time
 
     min_time = min_time_dt.timestamp()
     max_time = max_time_dt.timestamp()
@@ -635,7 +637,7 @@ def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = 
         total_duration_seconds=max_time - min_time,
         total_duration_string=format_duration(max_time_dt - min_time_dt),
         start_time_string=format_datetime(min_time_dt),
-        end_time_string=format_datetime(min_time_dt),
+        end_time_string=format_datetime(max_time_dt),
         total_height=len(pids) * bar_height,
     )
 
@@ -911,6 +913,8 @@ def parse_postgres_lines(
         "LOG:  automatic vacuum of ": handle_automatic_vacuum,
     }
 
+    timestamp_minmax: list[datetime.datetime] = []
+
     def try_parse(line: LogLine):
         for key, func in dispatch.items():
             if key in line.line:
@@ -919,6 +923,13 @@ def parse_postgres_lines(
                 context = parse_log_prefix(prefix, prefix_matchers)
                 if line.timestamp:
                     context.timestamp = line.timestamp
+
+                if not timestamp_minmax:
+                    timestamp_minmax.append(context.timestamp)
+                    timestamp_minmax.append(context.timestamp)
+                else:
+                    timestamp_minmax[0] = min(timestamp_minmax[0], context.timestamp)
+                    timestamp_minmax[1] = max(timestamp_minmax[1], context.timestamp)
 
                 saw_pid_at(context.pid, context.timestamp)
 
@@ -946,6 +957,8 @@ def parse_postgres_lines(
         statements=[stmt for stmts in stmts_by_process.values() for stmt in stmts],
         events=events,
         processes=processes,
+        start_time=timestamp_minmax[0],
+        end_time=timestamp_minmax[1],
     )
 
 
