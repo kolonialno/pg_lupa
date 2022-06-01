@@ -2,6 +2,8 @@
 
 Lupa visualizes PostgreSQL logs.
 
+![Screenshot](/docs/screenshot.png)
+
 It can be hard to debug Postgres issues based on manually reading logs.
 Problems that arise are often not indicated by single "smoking gun" log
 entries. Query A was slow because it was waiting for query B -- but why
