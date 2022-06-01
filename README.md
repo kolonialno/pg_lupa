@@ -36,6 +36,15 @@ your Postgres configuration. "%p" (process PID) must be present,
 otherwise Lupa will not be able to make a sensible visualization.
 Luckily, the default value of `%m [%p]` includes it.
 
+You can pass this as a flag with `--log-line-prefix-format`. Lupa will
+use the Postgres formatting string to construct a regex with which
+to parse log prefixes. However, Lupa doesn't understand all possible
+formatting directives yet. If your format is not supported yet, you can use
+`--log-line-prefix-regex` to specify a regex directly. It must have
+named capturing groups for at least "timestamp" and "pid". (Alternately,
+if your format is not supported yet, feel free to send a PR to add support
+for it!)
+
 For the logs to include the data that is useful to visualize, it is
 also assumed that `log_lock_waits` is on and that `log_min_duration_statement`
 is set to a threshold that logs any queries that have an interesting

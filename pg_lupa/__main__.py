@@ -6,12 +6,35 @@ from . import lupa
 
 
 @click.command()
-@click.option("--input-logs", type=click.File("r"))
-@click.option("--output-html", type=click.File("w"))
-@click.option("--timezone", default=None)
-@click.option("--sort-processes-by", default="time")
-@click.option("--log-line-prefix-format", default=None, type=str)
-@click.option("--log-line-prefix-regex", default=None, type=str)
+@click.option(
+    "--input-logs", type=click.File("r"), help="File from which to read Postgres logs"
+)
+@click.option(
+    "--output-html", type=click.File("w"), help="File to which to write a report (HTML)"
+)
+@click.option(
+    "--timezone",
+    default=None,
+    help="Time zone to be used in output report (e.g. 'Europe/Oslo')",
+)
+@click.option(
+    "--sort-processes-by",
+    default="time",
+    type=click.Choice(list(lupa.ProcessSortOrder.__members__)),
+    help="Sort order for processes in report",
+)
+@click.option(
+    "--log-line-prefix-format",
+    default=None,
+    type=str,
+    help="Postgres log_line_prefix setting (not all formatting is supported)",
+)
+@click.option(
+    "--log-line-prefix-regex",
+    default=None,
+    type=str,
+    help="Regex with capturing groups to match log line prefixes",
+)
 def main(
     input_logs,
     output_html,

@@ -1,0 +1,44 @@
+name: Python linting and checks
+
+on:
+  - push
+
+jobs:
+  black:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: "3.9"
+          cache: "pip"
+      - run: pip install -r dev-requirements.txt
+      - name: Run black
+        run: |
+          python -m black --check pg_lupa/
+
+  isort:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: "3.9"
+          cache: "pip"
+      - run: pip install -r dev-requirements.txt
+      - name: Run isort
+        run: |
+          python -m isort --check-only pg_lupa/
+
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: "3.9"
+          cache: "pip"
+      - run: pip install -r dev-requirements.txt
+      - name: Run mypy
+        run: |
+          python -m mypy pg_lupa/
