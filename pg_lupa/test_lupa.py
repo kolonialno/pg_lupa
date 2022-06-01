@@ -3,9 +3,11 @@ import io
 import os
 from pathlib import Path
 
+import click.testing
 import dateutil.tz
 import pytest
 
+from .__main__ import main
 from .lupa import (
     HoldingLockLogEntry,
     classify_sql,
@@ -259,3 +261,14 @@ def test_main_function_examples_file():
             output_file=output_file,
         )
         assert output_file.getvalue()
+
+
+def test_simple_run_program():
+    result = click.testing.CliRunner().invoke(
+        main,
+        [
+            "--input-logs",
+            str(EXAMPLES_DIR / "example.log"),
+        ],
+    )
+    assert result.exit_code == 0

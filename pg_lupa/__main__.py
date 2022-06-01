@@ -20,7 +20,7 @@ from . import lupa
 @click.option(
     "--sort-processes-by",
     default="time",
-    type=click.Choice(list(lupa.ProcessSortOrder.__members__)),
+    type=click.Choice(list(lupa.ProcessSortOrder.__members__), case_sensitive=False),
     help="Sort order for processes in report",
 )
 @click.option(
@@ -44,7 +44,7 @@ def main(
     timezone,
 ):
     viz_options = lupa.VizOptions(
-        process_sort_order=lupa.ProcessSortOrder(sort_processes_by),
+        process_sort_order=lupa.ProcessSortOrder(sort_processes_by.lower()),
         timezone=timezone,
     )
     parse_options = lupa.ParseOptions(
