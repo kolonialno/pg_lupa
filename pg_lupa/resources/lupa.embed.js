@@ -168,7 +168,7 @@ function draw() {
     });
 }
 
-$(document).on("click", function () {
+$("#timeline").on("click", function () {
   resetSidebarContent(true);
 });
 
