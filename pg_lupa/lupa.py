@@ -15,7 +15,7 @@ import jinja2
 import pkg_resources
 import pydantic
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 
 def format_duration(d: datetime.timedelta) -> str:
@@ -385,6 +385,7 @@ class ProcessVizData(pydantic.BaseModel):
     id: str
     y: int
     height: int
+    pid: int
 
 
 class StatementVizData(pydantic.BaseModel):
@@ -419,6 +420,8 @@ class VizData(pydantic.BaseModel):
     total_duration_string: str
     start_time_string: str
     end_time_string: str
+    start_time_unix_seconds: float
+    end_time_unix_seconds: float
 
 
 def classify_sql(sql: str) -> str:
@@ -640,6 +643,8 @@ def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = 
         total_duration_string=format_duration(max_time_dt - min_time_dt),
         start_time_string=format_datetime(min_time_dt),
         end_time_string=format_datetime(max_time_dt),
+        start_time_unix_seconds=min_time_dt.timestamp(),
+        end_time_unix_seconds=max_time_dt.timestamp(),
         total_height=len(pids) * bar_height,
     )
 
@@ -649,6 +654,7 @@ def visualize(model: Model, out: typing.TextIO, options: Optional[VizOptions] = 
                 id=f"process_{pid}",
                 y=index * bar_height,
                 height=bar_height,
+                pid=pid,
             )
         )
 
