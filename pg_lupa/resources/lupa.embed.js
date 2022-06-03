@@ -53,7 +53,10 @@ function resetSidebarContent(force) {
 }
 
 function draw() {
-  const width = $("#timeline").width() - 20;
+  const rightSpacing = 20;
+  const topLegendSpace = 30;
+  const leftLegendSpace = 50;
+  const width = $("#timeline").width() - rightSpacing - leftLegendSpace;
   const data = JSON.parse(document.getElementById("data").textContent);
 
   const div = d3
@@ -65,8 +68,24 @@ function draw() {
   const svg = d3
     .select("#timeline")
     .append("svg")
-    .attr("width", width)
+    .attr("width", width + leftLegendSpace)
     .attr("height", data.total_height);
+
+  const scale = d3
+    .scaleLinear()
+    .domain([data.start_time_unix_seconds, data.end_time_unix_seconds])
+    .range([leftLegendSpace, width + leftLegendSpace]);
+  const axis = d3
+    .axisBottom()
+    .scale(scale)
+    .tickFormat(function (x) {
+      const t = new Date(x * 1000);
+      const hs = t.getHours().toString().padStart(2, "0");
+      const ms = t.getMinutes().toString().padStart(2, "0");
+      const ss = t.getSeconds().toString().padStart(2, "0");
+      return hs + ":" + ms + ":" + ss;
+    });
+  svg.append("g").call(axis);
 
   svg
     .selectAll()
@@ -77,14 +96,31 @@ function draw() {
       return d.id;
     })
     .attr("x", 0)
-    .attr("width", width)
+    .attr("width", width + leftLegendSpace)
     .attr("y", function (d) {
-      return d.y;
+      return d.y + topLegendSpace;
     })
     .attr("height", function (d) {
       return d.height;
     })
     .attr("class", "pg_process");
+
+  svg
+    .selectAll()
+    .data(data.processes)
+    .enter()
+    .append("text")
+    .attr("x", 0)
+    .attr("y", function (d) {
+      return d.y + topLegendSpace;
+    })
+    .attr("font-size", "10px")
+    .text(function (d) {
+      return "" + d.pid;
+    })
+    .on("click", function (evt, d) {
+      evt.stopPropagation();
+    });
 
   svg
     .selectAll()
@@ -96,10 +132,12 @@ function draw() {
     })
     .attr("class", "pg_stmt")
     .attr("x", function (d) {
-      return (d.t_offset / data.total_duration_seconds) * width;
+      return (
+        leftLegendSpace + (d.t_offset / data.total_duration_seconds) * width
+      );
     })
     .attr("y", function (d) {
-      return d.y;
+      return d.y + topLegendSpace;
     })
     .attr("width", function (d) {
       return (d.duration / data.total_duration_seconds) * width;
@@ -131,13 +169,15 @@ function draw() {
       return d.id;
     })
     .attr("cx", function (d) {
-      return (d.t_offset / data.total_duration_seconds) * width;
+      return (
+        leftLegendSpace + (d.t_offset / data.total_duration_seconds) * width
+      );
     })
     .attr("fill", function (d) {
       return d.colour;
     })
     .attr("cy", function (d) {
-      return d.cy;
+      return topLegendSpace + d.cy;
     })
     .attr("r", function (d) {
       return d.size;
