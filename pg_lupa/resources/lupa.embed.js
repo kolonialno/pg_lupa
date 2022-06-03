@@ -10,7 +10,7 @@ function unfocus() {
   contentLockedToID = null;
 }
 
-function setContent(id, content, lock, processes1, processes2) {
+function setSidebarContent(id, content, lock, processes1, processes2) {
   if (contentLockedToID && !lock) return;
 
   const alreadyLockedToThis = contentLockedToID && contentLockedToID === id;
@@ -21,10 +21,13 @@ function setContent(id, content, lock, processes1, processes2) {
   }
 
   $("#context-info").html(content);
-  contentLockedToID = lock ? id : null;
+  contentLockedToID = lock && id ? id : null;
 
   $(".context-highlight").removeClass("context-highlight");
-  $("#" + id).addClass("context-highlight");
+
+  if (id) {
+    $("#" + id).addClass("context-highlight");
+  }
 
   $(".process-highlight").removeClass(
     "process-primary-highlight process-secondary-highlight"
@@ -43,6 +46,10 @@ function setContent(id, content, lock, processes1, processes2) {
       );
     });
   }
+}
+
+function resetSidebarContent(force) {
+  setSidebarContent(null, "", force);
 }
 
 function draw() {
@@ -104,13 +111,15 @@ function draw() {
       return d.colour;
     })
     .on("click", function (evt, d) {
-      setContent(d.id, d.mouseover_content, true);
+      setSidebarContent(d.id, d.mouseover_content, true);
+      evt.stopPropagation();
     })
     .on("mouseover", function (evt, d) {
-      setContent(d.id, d.mouseover_content, false);
+      setSidebarContent(d.id, d.mouseover_content, false);
+      evt.stopPropagation();
     })
     .on("mouseout", function (d) {
-      setContent(null, "", false);
+      resetSidebarContent(false);
     });
 
   svg
@@ -135,26 +144,32 @@ function draw() {
     })
     .attr("class", "pg_event")
     .on("click", function (evt, d) {
-      setContent(
+      setSidebarContent(
         d.id,
         d.mouseover_content,
         true,
         d.primary_related_process_ids,
         d.secondary_related_process_ids
       );
+      evt.stopPropagation();
     })
     .on("mouseover", function (evt, d) {
-      setContent(
+      setSidebarContent(
         d.id,
         d.mouseover_content,
         false,
         d.primary_related_process_ids,
         d.secondary_related_process_ids
       );
+      evt.stopPropagation();
     })
     .on("mouseout", function (d) {
-      setContent(null, "", false);
+      resetSidebarContent(false);
     });
 }
+
+$(document).on("click", function () {
+  resetSidebarContent(true);
+});
 
 draw();
