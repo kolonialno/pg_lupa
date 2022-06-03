@@ -15,7 +15,7 @@ import jinja2
 import pkg_resources
 import pydantic
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 
 def format_duration(d: datetime.timedelta) -> str:
